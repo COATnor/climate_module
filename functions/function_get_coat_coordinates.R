@@ -49,8 +49,9 @@ get_coat_coordinates <- function() {
     slice(grep("coordinates", name)) %>% 
     filter(!duplicated(name)) %>% 
     filter(name != "S_grubbing_transects_coordinates.txt") %>%  # use coordinates from plant data
-    filter(name != "V_snow_structure_intensive_coordinates.txt")  # "wrong" coordinate for ko_ko_hn_a
-  
+    filter(name != "V_snow_structure_intensive_coordinates.txt") %>%   # "wrong" coordinate for ko_ko_hn_a
+    filter(name != "V_insect_commun_diptera_coordinates.txt") %>%  # wrong site ids
+    filter(name != "V_insect_commun_coleoptera_deadwood_coordinates.txt")  # wrong site ids -> coordinates from V_bird_commun_deadwood should be used -> this dataset is broken at the moment
   
   ## download all coordinate files
   coord_list <- c()
