@@ -84,13 +84,14 @@ station_info_raw <- try(fromJSON(URLencode(url_sources),flatten=T))$data
 
 ## format data
 station_info <- station_info_raw %>% 
-  select(id, name, country, masl, validFrom, county, geometry.coordinates) %>% 
+  select(id, name, country, masl, validFrom, county, masl, geometry.coordinates) %>% 
   rename(v_station_id = id) %>% 
   mutate(v_station_name = tolower(name)) %>% 
   mutate(v_station_name = str_replace_all(v_station_name, c("å" = "aa", "æ" = "ae", "ø" = "o"))) %>% 
   mutate(date_first = substr(validFrom, 1, 10)) %>% 
   mutate(sn_region = ifelse(county == "SVALBARD", "svalbard",
                            ifelse(county == "FINNMARK", "varanger", NA))) %>% 
+  mutate(v_meter_above_sea_level = masl) %>% 
   mutate(e_dd = map_dbl(geometry.coordinates, ~ .x[1]),
          n_dd = map_dbl(geometry.coordinates, ~ .x[2])) %>% 
   arrange(sn_region, v_station_name)
@@ -98,7 +99,7 @@ station_info <- station_info_raw %>%
 ## make the aux file
 aux <- station_info %>% 
   mutate(date_last = NA, v_comment = NA) %>% 
-  select(sn_region, v_station_name, v_station_id, date_first, date_last, v_comment)
+  select(sn_region, v_station_name, v_station_id, v_meter_above_sea_level, date_first, date_last, v_comment)
 
 ## add comments to the aux file
 aux$v_comment[aux$v_station_id %in% c("SN98265", "SN98630", "SN99090")] <- "road weather station, uncertain quality"
@@ -114,8 +115,8 @@ utm33 <- st_transform(dd, crs = 32633)
 utm33 <- st_coordinates(utm33)
 
 ## add coordinates in utm33 to coordinate file
-coord$e_utm33 = utm33[,1]
-coord$n_utm33 = utm33[,2]
+coord$e_utm33 = round(utm33[,1])
+coord$n_utm33 = round(utm33[,2])
 
 ## save aux and coordinate file to a temporary directory for uploading them to the COAT data portal later
 write.table(aux, paste(temp_dir, "C101_annual_mean_air_temperature_weather_stations_aux.txt", sep = "/"), row.names = FALSE, sep = ";")
