@@ -170,11 +170,3 @@ package_update(pkg_updated, pkg_state$id, http_method = "POST")
 
 
 
-test <- map_dfr(paste(temp_dir, out_names, sep = "/"), read.table, header = TRUE, sep = ";")
-
-means <-test %>%  group_by(sn_region, t_year) %>% 
-  summarise(temp = mean(v_temperature_year))
-
-means %>% ggplot(aes(x = t_year, y = temp, color = sn_region)) +
-  geom_line() +
-  geom_smooth(method = "lm", aes(group = sn_region, fill = sn_region), linetype = "dashed", size = 1, alpha = 0.15, se = TRUE)

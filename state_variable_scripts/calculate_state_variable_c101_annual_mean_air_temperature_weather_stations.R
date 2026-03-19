@@ -15,9 +15,6 @@ library(jsonlite)
 library(sf)
 library(ckanr)
 
-## load functions
-source("https://github.com/COATnor/climate_module/blob/main/functions/functions_climate_state_variables.R?raw=TRUE")
-
 ## define a list with IDs of all weather stations that should be included in the dataset
 sources <- c("SN98974",  # Bergebydalen
              "SN98976",  # Torvhaugdalen
@@ -33,11 +30,11 @@ sources <- c("SN98974",  # Bergebydalen
              "SN98400",  # Makkaur Fyr
              "SN98360",  # Båtsfjord - Straumnesaksla
              "SN98090",  # Berlevåg Lufthavn
-             "SN98265",  # FV890 Gednje
-             "SN98630",  # E75 Komagvær
+             #"SN98265",  # FV890 Gednje
+             #"SN98630",  # E75 Komagvær
              "SN96850",  # Tana bru
              "SN96931",  # Polmak Tollsted
-             "SN99090",  # E6 Gandvikbakken
+             #"SN99090",  # E6 Gandvikbakken
              "SN99770",  # Istjørndalen
              "SN99763",  # Reindalspasset
              "SN99875",  # Janssonhaugen
@@ -53,15 +50,18 @@ sources <- c("SN98974",  # Bergebydalen
              "SN99910",  # Ny-ålesund
              "SN99370",  # Kirkenes Lufthavn
              "SN99460",  # Pasvik-Svanvik
-             "SN99540"   # Nyrud
+             "SN99540",  # Nyrud
+             "SN90450",  # Tromsø MET
+             "SN90400",  # Tromsø Holt
+             "SN90490"   # Tromsø Langnes
              )
 
 ## define other parameters to download weather station data from frost.met.no
 client_id <- Sys.getenv("frost_client_id")  # create a user account here: https://frost.met.no/auth/requestCredentials.html; then write here your client id
 endpoint <- paste0("https://", client_id, "@frost.met.no/observations/v0.jsonld")  # move to downloading
-elements <- "mean(air_temperature P1D)" # annual mean temperature
-#start_date <- "2004-01-01"  # use start date from aux file when processing all year, specify start date when processing a single year
-end_date <- "2024-12-31"
+elements <- "mean(air_temperature P1Y)" # annual mean temperature
+#start_date <- "2004-01-01"  # specify start date when processing a single year
+end_date <- "2025-12-31"
 #referenceTime <- paste(start_date, end_date, sep = "/")
 
 ## make a temporary directory (the files will be stored there temporary before they are uploaded to the COAT dataportal)
@@ -84,25 +84,30 @@ station_info_raw <- try(fromJSON(URLencode(url_sources),flatten=T))$data
 
 ## format data
 station_info <- station_info_raw %>% 
-  select(id, name, country, masl, validFrom, county, masl, geometry.coordinates) %>% 
+  select(id, name, country, masl, validFrom, county, masl, geometry.coordinates, stationHolders) %>% 
   rename(v_station_id = id) %>% 
   mutate(v_station_name = tolower(name)) %>% 
   mutate(v_station_name = str_replace_all(v_station_name, c("å" = "aa", "æ" = "ae", "ø" = "o"))) %>% 
   mutate(date_first = substr(validFrom, 1, 10)) %>% 
   mutate(sn_region = ifelse(county == "SVALBARD", "svalbard",
-                           ifelse(county == "FINNMARK", "varanger", NA))) %>% 
+                           ifelse(county == "FINNMARK", "varanger", 
+                                  ifelse(county == "TROMS", "troms", NA)))) %>% 
   mutate(v_meter_above_sea_level = masl) %>% 
   mutate(e_dd = map_dbl(geometry.coordinates, ~ .x[1]),
          n_dd = map_dbl(geometry.coordinates, ~ .x[2])) %>% 
+  mutate(v_owner = tolower(sapply(stationHolders, paste, collapse = ", "))) %>% 
+  mutate(v_owner = recode(v_owner,
+                        "statens vegvesen" = "statens_vegvesen",
+                        "norsk polarinstitutt" = "norsk_polarinstitutt",
+                        "met.no, avinor" = "met.no_avinor",
+                        "nibio, nilu – norsk institutt for luftforskning, met.no" = "nibio_nilu_met.no",
+                        "alfred-wegener-institut fur polar- und meeresforschung, met.no" = "alfred_wegener_institut_met.no")) %>% 
   arrange(sn_region, v_station_name)
 
 ## make the aux file
 aux <- station_info %>% 
   mutate(date_last = NA, v_comment = NA) %>% 
-  select(sn_region, v_station_name, v_station_id, v_meter_above_sea_level, date_first, date_last, v_comment)
-
-## add comments to the aux file
-aux$v_comment[aux$v_station_id %in% c("SN98265", "SN98630", "SN99090")] <- "road weather station, uncertain quality"
+  select(sn_region, v_station_name, v_station_id, v_owner, v_meter_above_sea_level, date_first, date_last, v_comment)
 
 ## make coordinate file
 coord <- station_info %>% 
@@ -118,9 +123,6 @@ utm33 <- st_coordinates(utm33)
 coord$e_utm33 = round(utm33[,1])
 coord$n_utm33 = round(utm33[,2])
 
-## save aux and coordinate file to a temporary directory for uploading them to the COAT data portal later
-write.table(aux, paste(temp_dir, "C101_annual_mean_air_temperature_weather_stations_aux.txt", sep = "/"), row.names = FALSE, sep = ";")
-write.table(coord, paste(temp_dir, "C101_annual_mean_air_temperature_weather_stations_coordinates.txt", sep = "/"), row.names = FALSE, sep = ";")
 
 
 ## ---------------------------------------------------------------------------- ##
@@ -143,7 +145,37 @@ element_info <- filter(element_info_raw, elementId == elements & timeOffset == "
   rename(v_station_id = sourceId) %>% 
   left_join(aux)
 
-length(unique(element_info_raw$sourceId))
+## check if temperature data is available for all stations
+aux$v_station_name[!aux$v_station_id %in% element_info$v_station_id] # add comment if there is no data available
+missing_station <- aux$v_station_name[!aux$v_station_id %in% element_info$v_station_id]
+
+## check if there are any gaps
+gaps <- element_info %>%
+  mutate(validFrom = ymd(validFrom), validTo = ymd(validTo)) %>% 
+  group_by(v_station_id) %>%
+  arrange(validFrom, .by_group = TRUE) %>%
+  mutate(gap = as.numeric(validFrom - lag(validTo, default = first(validFrom))) > 1) %>%
+  filter(gap == TRUE)
+gaps  # add comment if there are stations with gaps
+
+## add comments
+aux$v_comment[aux$v_station_name %in% missing_station]
+aux$v_comment[aux$v_station_name %in% missing_station] <- "no temperature data available from this station"
+
+## use the date when data is available as date_first
+date_first <- element_info %>% 
+  mutate(validFrom = ymd(validFrom), validTo = ymd(validTo)) %>% 
+  group_by(v_station_id) %>%
+  summarise(date_first = min(validFrom))
+
+aux <- aux %>% select(-date_first) %>% 
+  left_join(date_first) %>% 
+  select(sn_region, v_station_name, v_station_id, v_owner, v_meter_above_sea_level, date_first, date_last, v_comment)
+
+
+## save aux and coordinate file to a temporary directory for uploading them to the COAT data portal later
+write.table(aux, paste(temp_dir, "C101_annual_mean_air_temperature_weather_stations_aux.txt", sep = "/"), row.names = FALSE, sep = ";")
+write.table(coord, paste(temp_dir, "C101_annual_mean_air_temperature_weather_stations_coordinates.txt", sep = "/"), row.names = FALSE, sep = ";")
 
 
 ## ---------------------------------------------------------------------------- ##
@@ -151,14 +183,14 @@ length(unique(element_info_raw$sourceId))
 ## ---------------------------------------------------------------------------- ##
 
 ## janssonhaugen gives an error -> temp data first available in 2025
-## no temperature data for polmak -> gives an error
 
 state_var_list <- c()
 
 for (i in 1:nrow(aux)) {
   
+  if (is.na(aux$date_first[i])) next
   if (aux$date_first[i] > end_date) next
-
+  
   ## build the url to Frost
   url_data <- paste0(
     "https://",
@@ -176,62 +208,44 @@ for (i in 1:nrow(aux)) {
   ## Check if the request worked, print out any errors
   if (class(xs) != 'try-error') {
     raw_dat <- unnest(xs$data, cols = c(observations))
-    print("Data retrieved from frost.met.no!")
+    print("Data retrieved from frost.met.no!")  ## improve error message
   } else {
     print("Error: the data retrieval was not successful!")
+    next
   }
   
   ## format data
-  dat <- raw_dat %>% filter(timeOffset == "PT0H") %>%   
+  state_var_list[[i]] <- raw_dat %>% filter(timeOffset == "PT0H") %>%   
     mutate(date = ymd(as.Date(referenceTime))) %>% 
-    mutate(year = year(date), month = month(date), day = day(date)) %>% 
+    mutate(t_year = year(date), month = month(date), day = day(date)) %>% 
     mutate(station_id = substr(sourceId, 1, 7)) %>% 
-    select(station_id, date, month, day, year, value) %>% 
-    group_by(year) %>% 
-    filter(min(month) == 1) # keep only complete years
+    select(station_id, t_year, value) %>% 
+    rename(v_temperature_year = value) %>% 
+    mutate(sn_region = aux$sn_region[i], v_station_name = aux$v_station_name[i], v_station_id = aux$v_station_id[i]) %>% 
+    select(sn_region, v_station_name, v_station_id, t_year, v_temperature_year)
   
-  ## discard station that don't have a complete year
-  if(nrow(dat) == 0) next
+  ## add missing years with NA
+  first_year <- min(state_var_list[[i]]$t_year)
+  last_year <- max(state_var_list[[i]]$t_year)
+  all_years <- first_year:last_year
+  missing_years <- all_years[!all_years %in% state_var_list[[i]]$t_year]
   
-  ## calculate annual mean (function from Ole Einar)
-  years <- unique(dat$year)
-  
-  values <- c()
-  for (j in 1:length(unique(dat$year))) {
-    filter_dat <- filter(dat, year == years[j])
-    values[j] <- tm.ses(tg = filter_dat$value, dato = filter_dat$date, ses = "ann")
-  }
-  
-  # format data for COAT data portal
-  state_var_list[[i]] <- data.frame(sn_region = aux$sn_region[i],
-                                    v_station_name = aux$v_station_name[i],
-                                    v_station_id = aux$v_station_id[i], 
-                                    t_year = years,  
-                                    v_temperature_year = values) %>% 
-                                    select(sn_region, v_station_name, v_station_id, t_year, v_temperature_year)
-  
-  ## calculate annual mean (tidyverse)
-  # state_var_list[[i]] <- dat %>% group_by(year) %>% 
-  #   dplyr::summarise(v_temperature = round(mean(value, na.rm = TRUE), digits = 1)) %>% 
-  #   mutate(sn_site = stations[i], v_station_id = sources[i]) %>% 
-  #   mutate(sn_region = ifelse(sn_site %in% c("torvhaugdalen", "reinhaugen"), "varanger", "svalbard")) %>% 
-  #   rename(t_year = year) %>% 
-  #   select(sn_region, sn_site, t_year, v_station_id, v_temperature)
-  #   
+  state_var_list[[i]] <- state_var_list[[i]] %>% 
+    add_row(sn_region = aux$sn_region[i], v_station_name = aux$v_station_name[i], v_station_id = aux$v_station_id[i], t_year = missing_years, v_temperature_year = NA) %>% 
+    arrange(t_year)
   
 }
 
 ## combine to one dataset
 state_var_all <- bind_rows(state_var_list)
 
-## split data in one file for each year and save it to a temporary directory
-years <- sort(unique(state_var_all$t_year))
+## save data to a temporary directory
 
-for (i in 1:length(years)) {
-  state_var_year <- filter(state_var_all, t_year == years[i])
-  out_names[i] <- paste0("C101_annual_mean_air_temperature_weather_stations_", years[i], ".txt")
-  write.table(state_var_year, paste(temp_dir, out_names[i], sep = "/"), row.names = FALSE, sep = ";")
-}
+file_name <- paste0("C101_annual_mean_air_temperature_weather_stations_", min(state_var_all$t_year), "_", max(state_var_all$t_year), ".txt")
+file_name
+
+write.table(state_var_all, paste(temp_dir, file_name, sep = "/"), row.names = FALSE, sep = ";")
+
 
 
 ## ------------------------------------------------------------------ ##
@@ -268,7 +282,7 @@ resource_create(
 )
 
 ## upload the data files
-for (i in out_names) {
+for (i in file_name) {
   resource_create(
     package_id = pkg_state$id,
     description = NULL,
@@ -308,13 +322,4 @@ package_update(pkg_updated, pkg_state$id, http_method = "POST")
 
 
 
-
-test <- map_dfr(paste(temp_dir, out_names, sep = "/"), read.table, header = TRUE, sep = ";")
-
-means <-test %>%  group_by(sn_region, t_year) %>% 
-  summarise(temp = mean(v_temperature_year))
-
-means %>% ggplot(aes(x = t_year, y = temp, color = sn_region)) +
-  geom_line() +
-  geom_smooth(method = "lm", aes(group = sn_region, fill = sn_region), linetype = "dashed", size = 1, alpha = 0.15, se = TRUE)
 
