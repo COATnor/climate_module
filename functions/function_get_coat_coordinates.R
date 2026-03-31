@@ -77,7 +77,7 @@ get_coat_coordinates <- function() {
                               ifelse(substr(dataset_name, 1, 1) == "V", "varanger",
                                      ifelse(substr(dataset_name, 1, 1) == "T", "troms", NA)))) %>% 
     filter(!is.na(sn_site)) %>% 
-    select(sn_region, sn_locality, sn_site, e_dd, n_dd, e_utm33, n_utm33) %>% 
+    select(sn_region, sn_locality, sn_site, e_dd, n_dd, e_utm33, n_utm33, dataset_name) %>% 
     arrange(sn_site) %>% 
     mutate(e_dd = round(e_dd, digits = 5),
            n_dd = round(n_dd, digits = 5),
