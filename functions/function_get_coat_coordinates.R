@@ -67,7 +67,9 @@ get_coat_coordinates <- function() {
     
     coord_list[[i]]$dataset_name <- coord_overview$name[i]
   }
-  
+
+  #one dataframe with integer in sn_site need to changed to character before binding.
+  coord_list[[13]]$sn_site<-as.character(coord_list[[13]]$sn_site)
   
   ## keep only unique rows
   coords <- bind_rows(coord_list) %>% 
