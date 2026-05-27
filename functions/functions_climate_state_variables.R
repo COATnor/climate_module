@@ -72,21 +72,21 @@ md.winter<-function(tg,dato){
 
 
 #=================================================================
-# efd: Extreme frost days (tg < -30) 
+# ecd: Extreme cold days (tg < -30) 
 #=================================================================
 # Input: 
 # - tg = annual series of mean daily temperature
-efd<-function(tg){length(tg[tg< -30])}
+ecd <- function(tg){sum(tg < -30, na.rm = TRUE)}
 #_________________________________________________________________
 
 
 
 #=================================================================
-# fd: Extreme frost days (tg < 0) 
+# cd: Cold days (tg < 0) 
 #=================================================================
 # Input: 
 # - tg = annual series of mean daily temperature
-fd<-function(tg){length(tg[tg<0])}
+cd <- function(tg){sum(tg < 0, na.rm = TRUE)}
 #_________________________________________________________________
 
 
