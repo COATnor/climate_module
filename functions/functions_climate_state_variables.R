@@ -100,7 +100,7 @@ ecd <- function(tg) {
 #=================================================================
 # Input: 
 # - tg = annual series of mean daily temperature
-ecd <- function(tg) {
+cd <- function(tg) {
   tg %>%
     filter(t_month %in% c(11, 12, 1:4)) %>% # keep only winter months
     mutate(
