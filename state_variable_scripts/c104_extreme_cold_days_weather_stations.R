@@ -80,6 +80,9 @@ temp_dir <- tempdir()
 ckanr_setup(url =  "https://data.coat.no", 
             key = Sys.getenv("api_COAT"))  # write here your API key (e.g. "asdf123af123")
 
+## load ecd (extreme cold days) function from GitHub
+source("https://github.com/COATnor/climate_module/blob/main/functions/functions_climate_state_variables.R?raw=TRUE")
+
 
 ## ---------------------------------------------------------------------------- ##
 ## DOWNLOAD INFO ABOUT THE WEATHER STATIONS AND MAKE A COORDINATE AND AUX FILE
@@ -249,21 +252,8 @@ for (i in 1:nrow(aux)) {
 ## combine to one dataset
 data_all <- bind_rows(data_list)
 
-## calculate state variable
-state_var_all <- data_all %>%
-  filter(t_month %in% c(11, 12, 1:4)) %>% # keep only winter months
-  mutate(
-    t_year_winter = if_else(t_month %in% c(11, 12), t_year + 1, t_year)) %>% # define winter season year: Nov-Dec belong to next year's winter
-  group_by(sn_region, v_station_name, v_station_id, t_year_winter) %>%
-  summarise(
-    v_valid_days = sum(!is.na(v_temperature_day)), # days with non-missing temperature data
-    v_expected_days = as.integer(ymd(paste0(first(t_year_winter), "-04-30")) - ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1), # expected days in Nov-Apr season
-    v_data_coverage = v_valid_days / v_expected_days, # data coverage
-    v_extreme_cold_days = if_else(v_data_coverage >= 0.8, sum(v_temperature_day < -30, na.rm = TRUE), NA_real_) # count extreme cold days only if coverage >= 80%
-  ) %>%
-  select(sn_region, v_station_name, v_station_id, t_year_winter, v_extreme_cold_days) %>%
-  arrange(t_year_winter)
-
+## calculate state variable, ecd function is sourced from GitHub
+state_var_all <- ecd(data_all)
 
 ## save data to a temporary directory
 file_name <- paste0("C104_extreme_cold_days_weather_stations_", min(state_var_all$t_year_winter), "_", max(state_var_all$t_year_winter), ".txt")
