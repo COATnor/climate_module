@@ -6,6 +6,7 @@
 
 # Loading required libraries
 library(lubridate)
+library(dplyr)
 
 #=================================================================
 # climate.data # Load a (single point) test data set, make test date vector 
@@ -76,7 +77,20 @@ md.winter<-function(tg,dato){
 #=================================================================
 # Input: 
 # - tg = annual series of mean daily temperature
-ecd <- function(tg){sum(tg < -30, na.rm = TRUE)}
+ecd <- function(tg) {
+  tg %>%
+    filter(t_month %in% c(11, 12, 1:4)) %>% # keep only winter months
+    mutate(
+      t_year_winter = if_else(t_month %in% c(11, 12), t_year + 1, t_year)) %>% # Nov-Dec belong to the winter season (t_year_winter) in following year
+    group_by(sn_region, v_station_name, v_station_id, t_year_winter) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_temperature_day)), # days with non-missing temperature data
+      v_expected_days = as.integer(lubridate::ymd(paste0(first(t_year_winter), "-04-30")) - lubridate::ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1), # expected days in Nov-Apr winter season
+      v_data_coverage = v_valid_days / v_expected_days, # data coverage proportion
+      v_extreme_cold_days = if_else(v_data_coverage >= 0.8, sum(v_temperature_day < -30, na.rm = TRUE), NA_real_), .groups = "drop") %>% # count ecd if >= 0.8
+    select(sn_region, v_station_name, v_station_id, t_year_winter, v_extreme_cold_days) %>%
+    arrange(t_year_winter)
+}
 #_________________________________________________________________
 
 
@@ -86,7 +100,20 @@ ecd <- function(tg){sum(tg < -30, na.rm = TRUE)}
 #=================================================================
 # Input: 
 # - tg = annual series of mean daily temperature
-cd <- function(tg){sum(tg < 0, na.rm = TRUE)}
+ecd <- function(tg) {
+  tg %>%
+    filter(t_month %in% c(11, 12, 1:4)) %>% # keep only winter months
+    mutate(
+      t_year_winter = if_else(t_month %in% c(11, 12), t_year + 1, t_year)) %>% # Nov-Dec belong to the winter season (t_year_winter) in following year
+    group_by(sn_region, v_station_name, v_station_id, t_year_winter) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_temperature_day)), # days with non-missing temperature data
+      v_expected_days = as.integer(lubridate::ymd(paste0(first(t_year_winter), "-04-30")) - lubridate::ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1), # expected days in Nov-Apr winter season
+      v_data_coverage = v_valid_days / v_expected_days, # data coverage proportion
+      v_extreme_cold_days = if_else(v_data_coverage >= 0.8, sum(v_temperature_day < 0, na.rm = TRUE), NA_real_), .groups = "drop") %>% # count ecd if >= 0.8
+    select(sn_region, v_station_name, v_station_id, t_year_winter, v_extreme_cold_days) %>%
+    arrange(t_year_winter)
+}
 #_________________________________________________________________
 
 
