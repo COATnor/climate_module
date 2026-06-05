@@ -1,0 +1,404 @@
+#### --------------------------------------------------------------------------------------------------------- ####
+### STATE VARIABLE - C105_annual_degree_days_sum_above5_weather_stations
+### Date: 05.06.2026
+### Author: Vegard Bang Fjeldheim
+#### --------------------------------------------------------------------------------------------------------- ####
+
+## ------------------------------------------------------------------ ##
+## SETUP
+## ------------------------------------------------------------------ ##
+
+#fix problems with ø æ å if present in dataset
+Sys.setlocale("LC_ALL", "Norwegian")
+
+## load libraries
+if (!requireNamespace("tidyverse", quietly = TRUE)) {install.packages("tidyverse")};library("tidyverse")
+if (!requireNamespace("lubridate", quietly = TRUE)) {install.packages("lubridate")};library("lubridate")
+if (!requireNamespace("jsonlite", quietly = TRUE)) {install.packages("jsonlite")};library("jsonlite")
+if (!requireNamespace("sf", quietly = TRUE)) {install.packages("sf")};library("sf")
+if (!requireNamespace("ckanr", quietly = TRUE)) {install.packages("ckanr")};library("ckanr")
+
+## define a list with IDs of all weather stations that should be included in the dataset
+sources <- c("SN98974",  # Bergebydalen
+             "SN98976",  # Torvhaugdalen
+             "SN98978",  # Reinhaugen
+             "SN98640",  # Finnesvatnet  
+             "SN98642",  # Komagdalen
+             "SN98645",  # Hubehytta
+             "SN98648",  # Ragarokk
+             "SN96890",  # Korgåsen
+             "SN99600",  # Farkollen
+             "SN98790",  # Vadsø Lufthavn
+             "SN98550",  # Vardø Radio
+             "SN98400",  # Makkaur Fyr
+             "SN98360",  # Båtsfjord - Straumnesaksla
+             "SN98090",  # Berlevåg Lufthavn
+             #"SN98265",  # FV890 Gednje
+             #"SN98630",  # E75 Komagvær
+             "SN96850",  # Tana bru
+             "SN96931",  # Polmak Tollsted
+             #"SN99090",  # E6 Gandvikbakken
+             "SN99770",  # Istjørndalen
+             "SN99763",  # Reindalspasset
+             "SN99875",  # Janssonhaugen
+             "SN99874",  # Janssonhaufen Vest
+             "SN99882",  # Nedre Sassendalen
+             "SN99884",  # Klauva
+             "SN99810",  # Revnosa-Agardh
+             "SN99811",  # Inglefieldbukta
+             "SN99840",  # Svalbard Lufthavn
+             "SN99790",  # Isfjord Radio
+             "SN99895",  # Kvadehuken II
+             "SN99890",  # Kaffiøyra
+             "SN99910",  # Ny-ålesund
+             "SN99370",  # Kirkenes Lufthavn
+             "SN99460",  # Pasvik-Svanvik
+             "SN99540",  # Nyrud
+             "SN90450",  # Tromsø MET
+             "SN90400",  # Tromsø Holt
+             "SN90490"   # Tromsø Langnes
+)
+
+## define other parameters to download weather station data from frost.met.no
+client_id <- "ebb1a9df-ff02-4bb4-b0c6-7a9239b80dbc"  # create a user account here: https://frost.met.no/auth/requestCredentials.html; then write here your client id
+endpoint <- paste0("https://", client_id, "@frost.met.no/observations/v0.jsonld")  # move to downloading
+elements <- "mean(air_temperature P1D)" # mean daily air temperature
+#start_date <- "2004-01-01"  # specify start date when processing a single year
+end_date <- "2025-12-31"
+#referenceTime <- paste(start_date, end_date, sep = "/")
+
+## make a temporary directory (the files will be stored there temporary before they are uploaded to the COAT dataportal)
+temp_dir <- tempdir()
+
+## set up the connection to the COAT dataportal 
+ckanr_setup(url =  "https://data.coat.no", 
+            key = Sys.getenv("320a4a98-b15a-4d15-a767-4c66fbc358e2"))  # write here your API key (e.g. "asdf123af123")
+
+
+## ---------------------------------------------------------------------------- ##
+## DOWNLOAD INFO ABOUT THE WEATHER STATIONS AND MAKE A COORDINATE AND AUX FILE
+## ---------------------------------------------------------------------------- ##
+
+## build the url to frost
+url_sources <- paste0("https://", client_id, "@frost.met.no/sources/v0.jsonld?ids=", paste(sources, collapse = ","), "&types=SensorSystem")
+
+## download information about the weather stations
+station_info_raw <- try(fromJSON(URLencode(url_sources),flatten=T))$data
+
+## format data
+station_info <- station_info_raw %>% 
+  select(id, name, country, masl, validFrom, county, masl, geometry.coordinates, stationHolders) %>% 
+  rename(v_station_id = id) %>% 
+  mutate(v_station_name = tolower(name)) %>% 
+  mutate(v_station_name = str_replace_all(v_station_name, c("å" = "aa", "æ" = "ae", "ø" = "o"))) %>% 
+  mutate(date_first = substr(validFrom, 1, 10)) %>% 
+  mutate(sn_region = ifelse(county == "SVALBARD", "svalbard",
+                            ifelse(county == "FINNMARK", "varanger", 
+                                   ifelse(county == "TROMS", "troms", NA)))) %>% 
+  mutate(v_meter_above_sea_level = masl) %>% 
+  mutate(e_dd = map_dbl(geometry.coordinates, ~ .x[1]),
+         n_dd = map_dbl(geometry.coordinates, ~ .x[2])) %>% 
+  mutate(v_owner = tolower(sapply(stationHolders, paste, collapse = ", "))) %>% 
+  mutate(v_owner = recode(v_owner,
+                          "statens vegvesen" = "statens_vegvesen",
+                          "norsk polarinstitutt" = "norsk_polarinstitutt",
+                          "met.no, avinor" = "met.no_avinor",
+                          "nibio, nilu – norsk institutt for luftforskning, met.no" = "nibio_nilu_met.no",
+                          "alfred-wegener-institut fur polar- und meeresforschung, met.no" = "alfred_wegener_institut_met.no")) %>% 
+  arrange(sn_region, v_station_name)
+
+## make the aux file
+aux <- station_info %>% 
+  mutate(date_last = NA, v_comment = NA) %>% 
+  select(sn_region, v_station_name, v_station_id, v_owner, v_meter_above_sea_level, date_first, date_last, v_comment)
+
+## make coordinate file
+coord <- station_info %>% 
+  select(v_station_id, e_dd, n_dd)
+
+## convert coordinates to utm33
+dd <- cbind.data.frame(lon=coord$e_dd, lat=coord$n_dd) # only columns with coordinates
+dd <- st_as_sf(dd, coords = c("lon", "lat"), crs = "+proj=longlat +ellps=WGS84") # convert to spatial object
+utm33 <- st_transform(dd, crs = 32633)  
+utm33 <- st_coordinates(utm33)
+
+## add coordinates in utm33 to coordinate file
+coord$e_utm33 = round(utm33[,1])
+coord$n_utm33 = round(utm33[,2])
+
+
+## ---------------------------------------------------------------------------- ##
+## CHECK IF THE DATA IS AVAILABLE
+## ---------------------------------------------------------------------------- ##
+
+## build url to frost
+url_available <- paste0("https://", client_id, "@frost.met.no/observations/availableTimeSeries/v0.jsonld?sources=",  paste(sources, collapse = ","))
+
+## download information about which data is available
+element_info_raw <- try(fromJSON(URLencode(url_available),flatten=T))$data
+
+## format data
+element_info <- filter(element_info_raw, elementId == elements & timeOffset == "PT0H") %>% 
+  select(sourceId, validFrom, validTo) %>% 
+  mutate(sourceId = sub(":0", "", sourceId)) %>%  
+  mutate(validFrom = substr(validFrom, 1, 10), validTo = substr(validTo, 1, 10)) %>% 
+  rename(v_station_id = sourceId) %>% 
+  left_join(aux)
+
+#In the Frost API, timeOffset: PT0H denotes that daily data (P1D) covers the exact 24-hour period from midnight to midnight (to UTC) on the reference date. 
+
+## check if temperature data is available for all stations
+aux$v_station_name[!aux$v_station_id %in% element_info$v_station_id] # add comment if there is no data available
+missing_station <- aux$v_station_name[!aux$v_station_id %in% element_info$v_station_id]
+
+## check if there are any gaps
+gaps <- element_info %>%
+  mutate(validFrom = ymd(validFrom), validTo = ymd(validTo)) %>% 
+  group_by(v_station_id) %>%
+  arrange(validFrom, .by_group = TRUE) %>%
+  mutate(gap = as.numeric(validFrom - lag(validTo, default = first(validFrom))) > 1) %>%
+  filter(gap == TRUE)
+gaps  # add comment if there are stations with gaps
+
+## add comments
+aux$v_comment[aux$v_station_name %in% missing_station]
+aux$v_comment[aux$v_station_name %in% missing_station] <- "no temperature data available from this station"
+
+## use the date when data is available as date_first
+date_first <- element_info %>% 
+  mutate(validFrom = ymd(validFrom), validTo = ymd(validTo)) %>% 
+  group_by(v_station_id) %>%
+  summarise(date_first = min(validFrom))
+
+aux <- aux %>% select(-date_first) %>% 
+  left_join(date_first) %>% 
+  select(sn_region, v_station_name, v_station_id, v_owner, v_meter_above_sea_level, date_first, date_last, v_comment)
+
+
+## save aux and coordinate file to a temporary directory for uploading them to the COAT data portal later
+write.table(aux, paste(temp_dir, "C105_annual_degree_day_sum_above5_aux.txt", sep = "/"), row.names = FALSE, sep = ";")
+write.table(coord, paste(temp_dir, "C105_annual_degree_day_sum_above5_coordinates.txt", sep = "/"), row.names = FALSE, sep = ";")
+
+
+## ---------------------------------------------------------------------------- ##
+## DOWNLOAD AND PROCESS DATA FROM FROST
+## ---------------------------------------------------------------------------- ##
+
+## janssonhaugen gives an error -> temp data first available in 2025
+
+state_var_list <- c()
+
+for (i in 1:nrow(aux)) {
+  
+  if (is.na(aux$date_first[i])) next
+  if (aux$date_first[i] > end_date) next
+  
+  ## build the url to Frost
+  url_data <- paste0(
+    "https://",
+    client_id, 
+    "@frost.met.no/observations/v0.jsonld",
+    "?",
+    "sources=", aux$v_station_id[i],
+    "&referencetime=", paste(aux$date_first[i], end_date, sep = "/"),
+    "&elements=", elements
+  )
+  
+  ## Issue an HTTP GET request and extract JSON data
+  xs <- try(fromJSON(URLencode(url_data),flatten=T))
+  
+  ## Check if the request worked, print out any errors
+  if (class(xs) != 'try-error') {
+    raw_dat <- unnest(xs$data, cols = c(observations))
+    print("Data retrieved from frost.met.no!")  ## improve error message
+  } else {
+    print("Error: the data retrieval was not successful!")
+    next
+  }
+  
+  ## format data
+  state_var_list[[i]] <- raw_dat %>% 
+    filter(timeOffset == "PT0H") %>%   
+    mutate(date = ymd(as.Date(referenceTime))) %>% 
+    mutate(t_year = year(date), t_month = month(date), t_day = day(date)) %>% 
+    mutate(v_station_id = substr(sourceId, 1, 7)) %>% 
+    select(v_station_id, t_year, t_month, t_day, date, value) %>% 
+    rename(v_temperature_day = value) %>% 
+    mutate(sn_region = aux$sn_region[i], v_station_name = aux$v_station_name[i], v_station_id = aux$v_station_id[i]) %>% 
+    select(sn_region, v_station_name, v_station_id, t_year, t_month, t_day, date, v_temperature_day)
+  
+  ## add missing dates with NA to make complete years
+  first_date <- as.Date(paste0(min(state_var_list[[i]]$t_year), "-01-01"))
+  last_date  <- as.Date(paste0(max(state_var_list[[i]]$t_year), "-12-31"))
+  
+  
+  all_dates <- data.frame(
+    date = seq(first_date, last_date, by = "day")
+  )
+  
+  state_var_list[[i]] <- state_var_list[[i]] %>%
+    right_join(all_dates, by = "date") %>%
+    arrange(date) %>%
+    mutate(
+      t_year = year(date),
+      t_month = month(date),
+      t_day = day(date),
+      sn_region = aux$sn_region[i],
+      v_station_name = aux$v_station_name[i],
+      v_station_id = aux$v_station_id[i]
+    )
+  
+}
+
+## combine to one dataset
+state_var_all <- bind_rows(state_var_list)
+
+#remove winter months (nov.-apr.)
+state_var_all_summer <- state_var_all %>%
+  filter(t_month >= 5 & t_month <= 10) %>%
+  arrange(v_station_id, t_year, date)
+
+#function to calculate GDD within meteorological growing season
+calc_gdd_season <- function(data, thres_val = 5, min_run = 5) {  # keep threshold value = 5 and min_run = 5 to ensure that periods are defined by at least 5 consecutive days
+  
+  # arrange data and find temperatures over threshold value
+  met_data <- data %>%
+    arrange(v_station_id, date) %>%
+    mutate(over_thres = ifelse(is.na(v_temperature_day), FALSE, v_temperature_day > thres_val))
+  
+  # find consecutive days above or below the threshold value
+  met_data <- met_data %>%
+    group_by(v_station_id) %>%
+    mutate(run_id = with(rle(over_thres), rep(seq_along(lengths), lengths)))
+  
+  # calculate run length, type, and start date
+  met_data <- met_data %>%
+    group_by(v_station_id, run_id) %>%
+    mutate(
+      run_length = n(),
+      run_value  = first(over_thres),
+      run_start  = first(date)
+    ) %>%
+    ungroup()
+  
+  # identify start of the growing season for each year and station
+  start_dates <- met_data %>%
+    filter(run_value == TRUE, run_length >= min_run) %>%
+    group_by(v_station_id, t_year) %>%
+    summarise(start = min(run_start), .groups = "drop")
+  
+  # identify end of the growing season for each year and station
+  end_dates <- met_data %>%
+    filter(run_value == TRUE, run_length >= min_run) %>%
+    group_by(v_station_id, t_year) %>%
+    summarise(end = max(run_start + run_length - 1), .groups="drop")
+  
+  
+  # subset data to the growing season
+  met_data <- met_data %>%
+    left_join(start_dates, by=c("v_station_id","t_year")) %>%
+    left_join(end_dates,   by=c("v_station_id","t_year"))
+  
+  
+  # calculate GDD within the growing season
+  gdd_result <- met_data %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    summarise(
+      has_data = !all(is.na(v_temperature_day)),
+      has_season = any(!is.na(start)),
+      
+      v_gdd = case_when(
+        !has_data ~ NA_real_,
+        !has_season ~ 0,
+        TRUE ~ sum(v_temperature_day[
+          date >= start & date <= end &
+            v_temperature_day > thres_val
+        ], na.rm = TRUE)
+      ),
+      
+      .groups="drop"
+    ) %>%
+    select(-has_data, -has_season)
+  
+  
+  
+  return(gdd_result)
+}
+
+#make final dataset
+state_var_finished <- calc_gdd_season(state_var_all_summer) #insert datafile
+
+## save data to a temporary directory
+file_name <- paste0("C105_annual_degree_day_sum_above5_stations_", min(state_var_all$t_year), "_", max(state_var_all$t_year), ".txt")
+file_name
+
+write.table(state_var_finished, paste(temp_dir,"C105_annual_degree_day_sum_above5_weather_stations.txt",sep="/"), row.names = FALSE, sep = ";")
+
+## ------------------------------------------------------------------ ##
+## UPLOAD DATA FILES TO COAT DATA PORTAL
+## ------------------------------------------------------------------ ##
+
+## state variable has to be created (separate step -> either manually or with script) -> manually at the moment
+## create new version of the state variable (include step in this script or manually) when updating the state variable
+
+## search for your state variable
+state_name <- "C105_annual_degree_day_sum_above5_weather_stations_v1" # write here the name including the version of the state variable you want to add data to
+state_version <- "1" # write here the version of the state variable
+
+pkg_state <- package_search(q = list(paste("name:", state_name, sep = "")), fq = list(paste("version:", state_version, sep = "")), include_private = TRUE, include_drafts = TRUE)$results[[1]] # search for the dataset and save the results
+filenames_state <- pkg_state$resources %>% sapply("[[", "name") # get the filenames
+filenames_state # are there any files
+
+## upload the aux file
+resource_create(
+  package_id = pkg_state$id,
+  description = NULL,
+  upload = paste(tempdir(), "C105_annual_degree_day_sum_above5_weather_aux.txt", sep = "/"),
+  name = "C101_annual_mean_air_temperature_weather_stations_aux.txt",
+  http_method = "POST"
+)
+
+## upload the coordinate file
+resource_create(
+  package_id = pkg_state$id,
+  description = NULL,
+  upload = paste(tempdir(), "C105_annual_degree_day_sum_above5_weather_coordinates.txt", sep = "/"),
+  name = "C101_annual_mean_air_temperature_weather_stations_coordinates.txt",
+  http_method = "POST"
+)
+
+## upload the data files
+for (i in file_name) {
+  resource_create(
+    package_id = pkg_state$id,
+    description = NULL,
+    upload = paste(tempdir(), i, sep = "/"),
+    name = i,
+    http_method = "POST"
+  )
+}
+
+
+## ---------------------------------- ##
+## UPDATE THE STATE VARIABLE
+## ---------------------------------- ##
+
+## here you can update the metadata of the sate variable
+## you can for example change the sate from 'draft' to 'active (this is necessary if you created the state variable on data.coat.no and then added the datafiles via R)
+## you can also change the visibility from private to public
+
+pkg_state$name # check that the name is correct
+
+## save metadata of the package as a list (as = table -> but the object will be a list)
+pkg_updated <- package_show(pkg_state$id, as = "table", http_method = "POST")
+
+## do the necessary modifications of the metadata
+names(pkg_updated) # show the names of all metadata fields that can be updated
+pkg_updated$private <- TRUE # set private = FALSE to publish a dataset
+pkg_updated$state <- "active"
+
+## discard empty metadata fields (they will cause a validation error)
+pkg_updated <- discard(pkg_updated, is.null)
+
+## update the package
+package_update(pkg_updated, pkg_state$id, http_method = "POST")
