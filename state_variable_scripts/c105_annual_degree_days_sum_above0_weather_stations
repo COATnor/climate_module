@@ -60,7 +60,7 @@ sources <- c("SN98974",  # Bergebydalen
 )
 
 ## define other parameters to download weather station data from frost.met.no
-client_id <- "ebb1a9df-ff02-4bb4-b0c6-7a9239b80dbc"  # create a user account here: https://frost.met.no/auth/requestCredentials.html; then write here your client id
+client_id <- "INSERT_API_KEY_HERE"  # create a user account here: https://frost.met.no/auth/requestCredentials.html; then write here your client id
 endpoint <- paste0("https://", client_id, "@frost.met.no/observations/v0.jsonld")  # move to downloading
 elements <- "mean(air_temperature P1D)" # mean daily air temperature
 #start_date <- "2004-01-01"  # specify start date when processing a single year
@@ -72,7 +72,7 @@ temp_dir <- tempdir()
 
 ## set up the connection to the COAT dataportal 
 ckanr_setup(url =  "https://data.coat.no", 
-            key = Sys.getenv("320a4a98-b15a-4d15-a767-4c66fbc358e2"))  # write here your API key (e.g. "asdf123af123")
+            key = Sys.getenv("INSERT_API_KEY_HERE"))  # write here your API key (e.g. "asdf123af123")
 
 
 ## ---------------------------------------------------------------------------- ##
