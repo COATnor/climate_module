@@ -113,12 +113,19 @@ md.snow<-function(tg,swe){length(tg[tg>0&swe>0])}
 #=================================================================
 # Input: 
 # - tg = annual series of mean daily temperature
-# - swe = snow depth (as water equivalent)
-md.winter<-function(tg,dato){
-  indx<-c(1:length(dato))[month(dato)==11|month(dato)==12|month(dato)==1|month(dato)==2|month(dato)==3|month(dato)==4]
-#  print(cbind(indx,tg[indx]))
-  length(tg[indx][tg[indx]>0])
-  }
+md.winter<-function(tg) {
+  tg %>%
+    filter(t_month %in% c(11, 12, 1:4)) %>%
+    mutate(
+      t_year_winter = if_else(t_month %in% c(11, 12), t_year + 1, t_year)) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year_winter) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_temperature_day)),
+      v_expected_days = as.integer(lubridate::ymd(paste0(first(t_year_winter), "-04-30")) - lubridate::ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1),
+      v_data_coverage = v_valid_days / v_expected_days,
+      v_md_winter = if_else(v_data_coverage >= 0.8, sum(v_temperature_day > 0, na.rm = TRUE), NA_real_), .groups = "drop") %>%
+    select(sn_region, v_station_name, v_station_id, t_year_winter, v_md_winter) %>%
+    arrange(t_year_winter)
 #_________________________________________________________________
 
 
