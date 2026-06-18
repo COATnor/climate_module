@@ -18,9 +18,34 @@ library(dplyr)
 #=================================================================
 # fmd: Freeze-melt days
 #=================================================================
-# Input:
-# - tn,tx= annual series of daily minimum (tn) and  daily maximum (tx) temperature series
-fmd<-function(tn,tx){length(tx[tx>0&tn<0])}
+# Input dataframe tn_tx:
+# - tn,tx = annual series of daily minimum (tn) and  daily maximum (tx) temperature series
+
+fmd <- function(tn_tx) {
+  winter_months <- c(1:4, 11:12)
+  tn_tx %>%
+    mutate(
+      t_month = lubridate::month(t_date)
+    ) %>%
+    filter(t_month %in% winter_months) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_temperature_day_min) &
+          !is.na(v_temperature_day_max)),
+      v_expected_days = sum(lubridate::month(
+          seq.Date(
+            as.Date(paste0(first(t_year), "-01-01")),
+            as.Date(paste0(first(t_year), "-12-31")),
+            by = "day")) %in% winter_months),
+      v_data_coverage = v_valid_days / v_expected_days,
+      v_freeze_melt_days = if_else(
+        v_data_coverage >= 0.8,
+        sum(v_temperature_day_min < 0 &
+            v_temperature_day_max > 0,
+          na.rm = TRUE), NA_real_),
+      .groups = "drop") %>%
+    select(sn_region, v_station_name, v_station_id, t_year, v_freeze_melt_days)
+}
 #_________________________________________________________________
 
 
@@ -28,10 +53,36 @@ fmd<-function(tn,tx){length(tx[tx>0&tn<0])}
 #=================================================================
 # fmds: Freeze-melt days on snow
 #=================================================================
-# Input:
-# - tn,tx=annual series of daily minimum (tn) or daily maximum (tx) temperature series#
-# - sd= annual series of daily snow depth (sd)
-fmds<-function(tn,tx,sd){length(tx[tx>0&tn<0&sd>0])}
+# Input dataframe tn_tx_sd:
+# - tn,tx = annual series of daily minimum (tn) or daily maximum (tx) temperature series#
+# - sd = annual series of daily snow depth (sd)
+
+fmds <- function(tn_tx_sd) {
+  winter_months <- c(1:4, 11:12)
+  tn_tx_sd %>%
+    mutate(
+      t_month = lubridate::month(t_date)) %>%
+    filter(t_month %in% winter_months) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_temperature_day_min) &
+                           !is.na(v_temperature_day_max) &
+                           !is.na(v_snow_depth_day)),
+      v_expected_days = sum(lubridate::month(
+        seq.Date(
+          as.Date(paste0(first(t_year), "-01-01")),
+          as.Date(paste0(first(t_year), "-12-31")),
+          by = "day")) %in% winter_months),
+      v_data_coverage = v_valid_days / v_expected_days,
+      v_freeze_melt_days_snow = if_else(
+        v_data_coverage >= 0.8,
+        sum(v_temperature_day_min < 0 &
+              v_temperature_day_max > 0 &
+              v_snow_depth_day > 0,
+            na.rm = TRUE), NA_real_),
+      .groups = "drop") %>%
+    select(sn_region, v_station_name, v_station_id, t_year, v_freeze_melt_days_snow)
+}
 #_________________________________________________________________
 
 
@@ -75,7 +126,7 @@ md.winter<-function(tg,dato){
 #=================================================================
 # ecd: Extreme cold days (tg < -30) 
 #=================================================================
-# Input: 
+# Input dataframe: 
 # - tg = annual series of mean daily temperature
 ecd <- function(tg) {
   tg %>%
