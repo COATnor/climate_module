@@ -227,7 +227,7 @@ tm.ses<-function(tg,dato,ses){
 # rr.month: Monthly precipitation sum
 #=================================================================
 # Input:
-# - rr=annual daily temperature series
+# - rr=annual daily precipitation series
 # - imnd=month
 # - date-vector
 
