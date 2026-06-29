@@ -19,7 +19,7 @@ library(dplyr)
 # fmd: Freeze-melt days
 #=================================================================
 # Input dataframe tn_tx:
-# - tn,tx = annual series of daily minimum (tn) and  daily maximum (tx) temperature series
+# - tn,tx = annual series of daily minimum (tn) and daily maximum (tx) temperature series
 
 fmd <- function(tn_tx) {
   winter_months <- c(1:4, 11:12)
@@ -257,13 +257,31 @@ rr.ses<-function(rr,dato,ses){
 #_________________________________________________________________
 
 #=================================================================
-# ros: Rain on snow events
+# ros: Rain on snow days
 #=================================================================
-# Input:
+# Input dataframe rr_sd_tg:
 # - rr=annual daily precipitation series
+# - sd=annual daily snow depth series
 # - tg=annual daily temperature series
-# - swe=annual snow depth (as snow water equivalent) time serie
-ros<-function(rr,tg,swe){length(swe[rr>0&tg>0&swe>0])}
+
+ros <- function(rr_sd_tg) {
+  winter_months <- c(1:4, 11:12)
+  rr_sd_tg %>%
+    mutate(
+      t_month = lubridate::month(t_date),
+      t_year_winter = if_else(t_month %in% c(11, 12), t_year + 1, t_year)) %>% # Nov-Dec belong to the winter season (t_year_winter) in following year
+    filter(t_month %in% winter_months) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year_winter) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_precipitation_day) & !is.na(v_snow_depth_day) & !is.na(v_temperature_day)),
+      v_expected_days = as.integer(lubridate::ymd(paste0(first(t_year_winter), "-04-30")) - lubridate::ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1), # expected days in Nov-Apr winter season
+      v_data_coverage = v_valid_days / v_expected_days,
+      v_rain_on_snow_days = if_else(
+        v_data_coverage >= 0.8,
+        sum(v_precipitation_day > 0 & v_snow_depth_day > 0 & v_temperature_day > 0,
+            na.rm = TRUE), NA_real_), .groups = "drop") %>%
+    select(sn_region, v_station_name, v_station_id, t_year_winter, v_rain_on_snow_days)
+}
 #_________________________________________________________________
 
 
