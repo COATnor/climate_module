@@ -83,7 +83,7 @@ end_date <- "2026-04-30"
 ## make a temporary directory (the files will be stored there temporary before they are uploaded to the COAT dataportal)
 temp_dir <- tempdir()
 
-## ## get functions for calculating rain-on-snow days from GitHub ("ros" function used later in this script)
+## get functions for calculating rain-on-snow days from GitHub ("ros" function used later in this script)
 source("https://github.com/COATnor/climate_module/blob/main/functions/functions_climate_state_variables.R?raw=TRUE")
 
 ## set up the connection to the COAT dataportal 
