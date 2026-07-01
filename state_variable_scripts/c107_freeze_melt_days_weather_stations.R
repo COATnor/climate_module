@@ -75,7 +75,7 @@ elements_max <- "max(air_temperature P1D)" # daily temperature maximum
 elements_snow <- "surface_snow_thickness" # daily snow depth
 
 #start_date <- "2004-01-01"  # specify start date when processing a single year
-end_date <- "2025-12-31"
+end_date <- "2026-04-30"
 #referenceTime <- paste(start_date, end_date, sep = "/")
 
 ## make a temporary directory (the files will be stored there temporary before they are uploaded to the COAT dataportal)
