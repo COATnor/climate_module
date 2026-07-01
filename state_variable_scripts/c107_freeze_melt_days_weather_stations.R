@@ -547,52 +547,6 @@ data_all <- data_all_min %>%
     by = c("sn_region", "v_station_name", "v_station_id", "t_year", "t_date")) %>%
   arrange(v_station_id, t_date)
 
-
-## checking dates
-first_temp <- data_all %>%
-  filter(
-    !is.na(v_temperature_day_min),
-    !is.na(v_temperature_day_max)
-  ) %>%
-  group_by(v_station_id) %>%
-  summarise(
-    date_first_temperature_calc = min(t_date),
-    .groups = "drop")
-
-first_snow <- data_all %>%
-  filter(!is.na(v_snow_depth_day)) %>%
-  group_by(v_station_id) %>%
-  summarise(
-    date_first_snow_calc = min(t_date),
-    .groups = "drop")
-
-aux_check <- aux %>%
-  left_join(first_temp, by = "v_station_id") %>%
-  left_join(first_snow, by = "v_station_id")
-
-temp_errors <- aux_check %>%
-  filter(date_first_temperature != date_first_temperature_calc)
-temp_errors
-
-snow_errors <- aux_check %>%
-  filter(date_first_snow != date_first_snow_calc)
-snow_errors
-
-# change date if errors
-#aux_corrected <- aux_check %>%
-  mutate(
-    date_first_temperature =
-      coalesce(
-        date_first_temperature_calc,
-        date_first_temperature),
-    date_first_snow =
-      coalesce(
-        date_first_snow_calc,
-        date_first_snow)) %>%
-  select(-date_first_temperature_calc,
-         -date_first_snow_calc)
-
-
 ## check that there is only one row per year and date
 multiple_rows <- data_all[duplicated(data_all[, c("v_station_id", "t_date")]), ]
 nrow(multiple_rows)
@@ -605,20 +559,17 @@ na_counts <- data_all %>%
     na_counts_max = sum(is.na(v_temperature_day_max)),
     na_counts_snow = sum(is.na(v_snow_depth_day)))
 
-## unique combinations of station_id and year, should correspond to number of rows in state_var_all
-unique(data_all[, c("v_station_id", "t_year")])
-
 
 ## calculate state variable
 state_var_all <- fmd(data_all) %>%
   left_join(
     fmds(data_all),
-    by = c("sn_region", "v_station_name", "v_station_id", "t_year")) %>%
-  arrange(sn_region, v_station_name, t_year)
+    by = c("sn_region", "v_station_name", "v_station_id", "t_year_winter")) %>%
+  arrange(sn_region, v_station_name, t_year_winter)
 
 
 ## save data to a temporary directory
-file_name <- paste0("C107_freeze_melt_days_weather_stations_", min(state_var_all$t_year), "_", max(state_var_all$t_year), ".txt")
+file_name <- paste0("C107_freeze_melt_days_weather_stations_", min(state_var_all$t_year_winter), "_", max(state_var_all$t_year_winter), ".txt")
 file_name
 
 write.table(state_var_all, "...C107_freeze_melt_days_weather_stations_1920_2025.txt", row.names = FALSE, sep = ";")
