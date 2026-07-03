@@ -246,6 +246,27 @@ rr.ses<-function(rr,dato,ses){
 }
 #_________________________________________________________________
 
+
+
+#=================================================================
+# frs: Fractions of precipitation falling as rain and snow
+#=================================================================
+# Input:
+# - tg=annual daily mean temperature series
+frs <- function(tg) {
+  tg %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    summarise(
+      n_year = sum(!is.na(v_temperature_day)),
+      frac_rain = if_else(n_year > 0, round(sum(v_temperature_day > 0, na.rm = TRUE)/n_year, digits = 3), NA_real_),
+      frac_snow = if_else(n_year > 0, round(sum(v_temperature_day <= 0, na.rm = TRUE)/n_year, digits = 3), NA_real_)) %>%
+  select(sn_region, v_station_name, v_station_id, t_year, v_frac_rain, v_frac_snow) %>%
+    arrange(t_year)
+}
+#_________________________________________________________________
+
+
+
 #=================================================================
 # ros: Rain on snow days
 #=================================================================
