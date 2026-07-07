@@ -300,22 +300,25 @@ ros <- function(rr_sd_tg) {
 #=================================================================
 # treeline: Paulsen&Körner tree growth indicator. 
 #=================================================================
-# Input:
+# Input dataframe:
 # - tg=annual daily temperature series
 
-# Return: 
-# - pk.gs = Growing days above 0.9 degC
-# - pk.tam = mean temperature in pk.gs
-# - pk.treegrowth = binary indictor whether tree growing conditions are
-#                   fulfilled (1) or not (0). 
-treeline<-function(tg){
-  cnt<-length(tg[tg>0.9])
-  tm<-round(mean(tg[tg>0.9]),digits=1)
-  tree<-ifelse(tm>6.4&cnt>94,1,0)
-  treel<-c(cnt,tm,tree)
-  names(treel)<-c("pk.gs","pk.tam","pk.treegrowth")
-  treeline<-treel
-  }
+# Returns: 
+# - v_length_gs_pk = growing days, temperature above 0.9 degC
+# - v_temperature_mean_pk = mean temperature in growing season
+# - v_treegrowth_pk = binary indictor whether tree growing conditions are fulfilled (1) or not (0).
+
+treeline <- function(tg){
+  tg %>%
+    filter(v_temperature_day > 0.9) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    summarise(
+      v_length_gs_pk = n(),
+      v_temperature_mean_pk = round(mean(v_temperature_day, na.rm = TRUE), 1),
+      v_treegrowth_pk = if_else(v_length_gs_pk >= 94 & v_temperature_mean_pk >= 6.4, 1L, 0L)) %>%
+    select(sn_region, v_station_name, v_station_id, t_year, v_length_gs_pk, v_temperature_mean_pk, v_treegrowth_pk) %>%
+    arrange(sn_region, v_station_name, v_station_id, t_year)
+}
 #_________________________________________________________________
 
 
