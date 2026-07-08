@@ -2,7 +2,19 @@
 ### STATE VARIABLE - C107_freeze_melt_days_weather_stations
 ### Date: 15.04.2026
 ### Author: Guro Bang Synnes
-#### ------------------------------------------------------------------------------------------------------------ ####
+#### --------------------------------------------------------------------------------------------------------- ####
+
+## ------------------------------------------------------------------ ##
+## WORKFLOW
+## ------------------------------------------------------------------ ##
+# This script calculates the number of freeze-melt days during winter seasons for weather stations, and also number of freeze-melt days when there is snow.
+# It generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
+# Freeze-melt days are defined as days where the minimum temperature is below 0 degrees Celsius and maximum temperature is above 0 degrees Celsius.
+# Freeze-melt days when there is snow is calculated in the same way, but only for days where snow thickness is above 0 cm.
+# The winter season includes all days between November 1st and April 30th. Here, t_year_winter refers to the winter season ending in April that year.
+# The script downloads three elements from Frost, namely min(air_temperature P1D) and max(air_temperature P1D) with timeOffset PT0H (preferred) or PT18H, and surface_snow_thickness with timeResolution P1D.
+# The fmd function (sourced from GitHub) is used to calculate the number of freeze-melt days and also freeze-melt days when snow in a winter season for a weather station if the data coverage from the elements that are required is at least 80% for winter season days.
+
 
 ## ------------------------------------------------------------------ ##
 ## SETUP
