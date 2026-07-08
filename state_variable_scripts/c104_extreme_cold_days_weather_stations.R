@@ -2,7 +2,17 @@
 ### STATE VARIABLE - C104_extreme_cold_days_weather_stations
 ### Date: 27.05.2026
 ### Author: Guro Bang Synnes
-#### ------------------------------------------------------------------------------------------------------------ ####
+#### --------------------------------------------------------------------------------------------------------- ####
+
+## ------------------------------------------------------------------ ##
+## WORKFLOW
+## ------------------------------------------------------------------ ##
+# This script calculates the number of days where daily mean temperature is below -30 degrees Celcius during the winter season for weather stations.
+# It also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
+# The winter season includes all days between November 1st and April 30th. Here, t_year_winter refers to the winter season ending in April that year.
+# It downloads the element mean(air_temperature P1D) from Frost, with timeOffset PT0H (preferred) or PT6H.
+# The ecd function (sourced from GitHub) is used to calculate the number of extreme cold days in a winter season for a weather station if daily mean temperature data are available for at least 80% of the winter season days.
+
 
 ## ------------------------------------------------------------------ ##
 ## SETUP
@@ -139,7 +149,7 @@ coord$n_utm33 = round(utm33[,2])
 
 
 ## ---------------------------------------------------------------------------- ##
-## CHECK IF THE DATA IS AVAILABE
+## CHECK IF THE DATA IS AVAILABLE
 ## ---------------------------------------------------------------------------- ##
 
 ## build url to frost
