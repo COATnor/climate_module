@@ -2,7 +2,17 @@
 ### STATE VARIABLE - C302_annual_sum_rain_snow_weather_stations
 ### Date: 29.06.2026
 ### Author: Guro Bang Synnes
-#### ------------------------------------------------------------------------------------------------------------ ####
+#### --------------------------------------------------------------------------------------------------------- ####
+
+## ------------------------------------------------------------------ ##
+## WORKFLOW
+## ------------------------------------------------------------------ ##
+# This script calculates the annual sum of precipitation and the fraction falling as rain and snow for weather stations.
+# It also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
+# It downloads the elements sum(precipitation_amount P1Y) with timeOffset PT6H, and mean(air_temperature P1D) from Frost with timeOffset PT0H (preferred) or PT6H.
+# The frs function (sourced from GitHub) is used to calculate the fractions of the precipitation falling as rain and snow based on temperatures,
+# but the annual sum of precipitation is taken directly from sum(precipitation_amount P1Y).
+
 
 ## ------------------------------------------------------------------ ##
 ## SETUP
@@ -140,7 +150,7 @@ coord$n_utm33 = round(utm33[,2])
 
 
 ## ---------------------------------------------------------------------------- ##
-## CHECK IF THE DATA IS AVAILABE
+## CHECK IF THE DATA IS AVAILABLE
 ## ---------------------------------------------------------------------------- ##
 
 ## build url to frost
