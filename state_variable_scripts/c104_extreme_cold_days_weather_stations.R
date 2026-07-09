@@ -18,6 +18,8 @@
 ## SETUP
 ## ------------------------------------------------------------------ ##
 
+rm(list =ls())
+
 ## load libraries
 library(tidyverse)
 library(lubridate)
@@ -104,7 +106,7 @@ url_sources <- paste0("https://", client_id, "@frost.met.no/sources/v0.jsonld?id
 ## download information about the weather stations
 station_info_raw <- try(fromJSON(URLencode(url_sources),flatten=T))$data
 
-## format data, remember to check that special characters are converted to aa/ae/o and that "nibio_nilu_met.no" is converted correctly
+## format data, remember to check that special characters are converted to aa/ae/o and that v_owner is converted correctly
 station_info <- station_info_raw %>% 
   select(id, name, country, masl, validFrom, county, masl, geometry.coordinates, stationHolders) %>% 
   rename(v_station_id = id) %>% 
@@ -123,8 +125,8 @@ station_info <- station_info_raw %>%
   mutate(v_owner = recode(v_owner,
                           "statens vegvesen" = "statens_vegvesen",
                           "norsk polarinstitutt" = "norsk_polarinstitutt",
-                          "met.no, avinor" = "met.no_avinor",
-                          "nilu – norsk institutt for luftforskning, met.no, nibio" = "nibio_nilu_met.no",
+                          "avinor, met.no" = "met.no_avinor",
+                          "nilu – norsk institutt for luftforskning, nibio, met.no" = "nibio_nilu_met.no",
                           "alfred-wegener-institut fur polar- und meeresforschung, met.no" = "alfred_wegener_institut_met.no")) %>% 
   arrange(sn_region, v_station_name)
 
