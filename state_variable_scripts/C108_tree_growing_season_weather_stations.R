@@ -9,10 +9,10 @@
 ## ------------------------------------------------------------------ ##
 # This script calculates the length of the tree growing season, mean temperature in this period and, based on this, whether tree growth is predicted.
 # The script also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
-# Growing season length is the number of days where temperature is above 0.9 degrees Celsius, and tree growth is predicted if the growing season
+# Growing season length is the number of days where temperature is above 0.9 degrees Celsius, and tree growth is predicted (equals 1) if the growing season
 # is at least 94 days with a mean temperature of at least 6.4 degrees Celsius for those days
 # The script downloads the element mean(air_temperature P1D) from Frost, with timeOffset PT0H (preferred) or PT6H.
-# The treeline function (sourced from GitHub) is used to calculate the growing season length, mean temperature and 
+# The treeline function (sourced from GitHub) is used to calculate the growing season length, mean temperature in this period and whether tree growth is predicted (1 or 0)
 
 
 ## ------------------------------------------------------------------ ##
