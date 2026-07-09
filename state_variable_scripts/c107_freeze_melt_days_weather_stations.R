@@ -111,7 +111,7 @@ url_sources <- paste0("https://", client_id, "@frost.met.no/sources/v0.jsonld?id
 ## download information about the weather stations
 station_info_raw <- try(fromJSON(URLencode(url_sources),flatten=T))$data
 
-## format data, remember to check that special characters are converted to aa/ae/o
+## format data, remember to check that special characters are converted to aa/ae/o and v_owner is converted correctly
 station_info <- station_info_raw %>% 
   select(id, name, country, masl, validFrom, county, masl, geometry.coordinates, stationHolders) %>% 
   rename(v_station_id = id) %>%
@@ -130,8 +130,8 @@ station_info <- station_info_raw %>%
                           "statens vegvesen" = "statens_vegvesen",
                           "norsk polarinstitutt" = "norsk_polarinstitutt",
                           "avinor, met.no" = "met.no_avinor",
-                          "nilu – norsk institutt for luftforskning, met.no, nibio" = "nibio_nilu_met.no",
-                          "met.no, alfred-wegener-institut fur polar- und meeresforschung" = "alfred_wegener_institut_met.no")) %>% 
+                          "nilu – norsk institutt for luftforskning, nibio, met.no" = "nibio_nilu_met.no",
+                          "alfred-wegener-institut fur polar- und meeresforschung, met.no" = "alfred_wegener_institut_met.no")) %>% 
   arrange(sn_region, v_station_name)
 
 ## make the aux file
