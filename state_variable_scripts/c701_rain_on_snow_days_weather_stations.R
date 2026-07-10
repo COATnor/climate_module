@@ -2,7 +2,20 @@
 ### STATE VARIABLE - C701_rain_on_snow_days_weather_stations
 ### Date: 24.06.2026
 ### Author: Guro Bang Synnes
-#### ------------------------------------------------------------------------------------------------------------ ####
+#### --------------------------------------------------------------------------------------------------------- ####
+
+## ------------------------------------------------------------------ ##
+## WORKFLOW
+## ------------------------------------------------------------------ ##
+# This script calculates the number of days with rain on snow in winter seasons for weather stations.
+# It also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
+# Rain on snow days are defined as days when precipitation amount > 0 mm, daily mean temperature > 0 degrees Celsius and snow thickness > 0 cm.
+# The script downloads three elements from Frost, namely mean(air_temperature P1D) with timeOffset PT0H (preferred) or PT6H,
+# sum(precipitation_amount P1D) with timeOffset PT18 (preferred) or PT6H, and surface_snow_thickness with timeResolution P1D.
+# The ros function (sourced from GitHub) is used to calculate the rain on snow days in a winter season for a weather station if the
+# data coverage from the three elements that are required is at least 80% for winter season days.
+# The winter season includes all days between November 1st and April 30th. Here, t_year_winter refers to the winter season ending in April that year.
+
 
 ## ------------------------------------------------------------------ ##
 ## SETUP
