@@ -2,7 +2,15 @@
 ### STATE VARIABLE - C303_monthly_sum_precipitation_weather_stations
 ### Date: 24.04.2026
 ### Author: Guro Bang Synnes
-#### ------------------------------------------------------------------------------------------------------------ ####
+#### --------------------------------------------------------------------------------------------------------- ####
+
+## ------------------------------------------------------------------ ##
+## WORKFLOW
+## ------------------------------------------------------------------ ##
+# This script calculates the monthly sum of precipitation for weather stations.
+# It also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
+# It downloads the element sum(precipitation_amount P1M) with timeOffset PT6H (preferred) or PT18H from Frost and formats the state variable dataset.
+
 
 ## ------------------------------------------------------------------ ##
 ## SETUP
