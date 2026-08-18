@@ -298,6 +298,34 @@ ros <- function(rr_sd_tg) {
 
 
 #=================================================================
+# scd: Snow cover duration
+#=================================================================
+# Input dataframe:
+# - snowdays = series of daily surface snow thickness.
+
+scd <- function(snowdays) {
+  winter_months <- c(1:4, 11:12)
+  snowdays %>%
+    mutate(
+      t_month = lubridate::month(t_date),
+      t_year_winter = if_else(t_month %in% c(11, 12), t_year + 1, t_year)) %>% # Nov-Dec belong to the winter season (t_year_winter) in following year
+    filter(t_month %in% winter_months) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year_winter) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_snow_depth_day)),
+      v_expected_days = as.integer(lubridate::ymd(paste0(first(t_year_winter), "-04-30")) - lubridate::ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1), # expected days in Nov-Apr winter season
+      v_data_coverage = v_valid_days / v_expected_days,
+      v_snowdays = if_else(v_data_coverage >= 0.8,
+        sum(v_snow_depth_day >= 1, na.rm = TRUE),
+        NA_real_),
+      .groups = "drop") %>%
+    select(sn_region, v_station_name, v_station_id, t_year_winter, v_snowdays)
+}
+#_________________________________________________________________
+
+
+
+#=================================================================
 # treeline: Paulsen&Körner tree growth indicator. 
 #=================================================================
 # Input dataframe:
