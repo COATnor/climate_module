@@ -17,12 +17,19 @@
 ## SETUP
 ## ------------------------------------------------------------------ ##
 
-## load libraries
-library(tidyverse)
-library(lubridate)
+## clear workspace
+rm(list = ls())
+
+## load libraries, missing packages will be installed
+if (!require("remotes")) install.packages("remotes")
+if (!require("ckanr")) remotes::install_github("ropensci/ckanr"); library("ckanr")
+if (!require("tidyverse")) install.packages("tidyverse"); library("tidyverse")
+if (!require("lubridate")) install.packages("tidyverse"); library("lubridate")
 library(jsonlite)
 library(sf)
-library(ckanr)
+
+
+
 
 ## define a list with IDs of all weather stations that should be included in the dataset
 sources <- c("SN98974",  # Bergebydalen
@@ -76,10 +83,10 @@ end_date <- "2025-12-31"
 ## make a temporary directory (the files will be stored there temporary before they are uploaded to the COAT dataportal)
 temp_dir <- tempdir()
 
-## set up the connection to the COAT dataportal 
-ckanr_setup(url =  "https://data.coat.no", 
-            key = Sys.getenv("api_COAT"))  # write here your API key (e.g. "asdf123af123")
-
+## setup the connection to the COAT data portal
+COAT_url <- "https://data.coat.no/"  # write here the url to the COAT data portal
+COAT_key <- Sys.getenv("COAT_key")  # paste your API token here (Manage -> API tokens on data.coat.no) or save it as an Environment variable
+ckanr_setup(url = COAT_url, key = COAT_key)
 
 ## ---------------------------------------------------------------------------- ##
 ## DOWNLOAD INFO ABOUT THE WEATHER STATIONS AND MAKE A COORDINATE AND AUX FILE
@@ -304,7 +311,7 @@ for (i in file_name) {
 ## ---------------------------------- ##
 
 ## here you can update the metadata of the sate variable
-## you can for example change the sate from 'draft' to 'active (this is necessary if you created the state variable on data.coat.no and then added the datafiles via R)
+## you can for example change the state from 'draft' to 'active (this is necessary if you created the state variable on data.coat.no and then added the datafiles via R)
 ## you can also change the visibility from private to public
 
 pkg_state$name # check that the name is correct
