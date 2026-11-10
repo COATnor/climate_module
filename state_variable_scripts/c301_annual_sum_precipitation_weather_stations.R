@@ -86,7 +86,12 @@ temp_dir <- tempdir()
 ## setup the connection to the COAT data portal
 COAT_url <- "https://data.coat.no/"  # write here the url to the COAT data portal
 COAT_key <- Sys.getenv("COAT_key")  # paste your API token here (Manage -> API tokens on data.coat.no) or save it as an Environment variable
-ckanr_setup(url = COAT_url, key = COAT_key)
+ckanr_setup(url = COAT_url, key = if (COAT_key == "") NULL else COAT_key)
+
+# helper for the authenticated downloads below. An empty COAT_key sends an
+# empty Authorization header, which CKAN treats as an anonymous request.
+auth_headers <- httr::add_headers(Authorization = COAT_key) #necessary?
+
 
 ## ---------------------------------------------------------------------------- ##
 ## DOWNLOAD INFO ABOUT THE WEATHER STATIONS AND MAKE A COORDINATE AND AUX FILE
@@ -119,8 +124,8 @@ station_info <- station_info_raw %>%
                           "statens vegvesen" = "statens_vegvesen",
                           "norsk polarinstitutt" = "norsk_polarinstitutt",
                           "met.no, avinor" = "met.no_avinor",
-                          "nibio, met.no, nilu – norsk institutt for luftforskning" = "nibio_nilu_met.no",
-                          "alfred-wegener-institut fur polar- und meeresforschung, met.no" = "alfred_wegener_institut_met.no")) %>%
+                          "met.no, nibio, nilu – norsk institutt for luftforskning" = "nibio_nilu_met.no",
+                          "met.no, alfred-wegener-institut fur polar- und meeresforschung" = "alfred_wegener_institut_met.no")) %>%
   arrange(sn_region, v_station_name)
 
 ## make the aux file
@@ -268,17 +273,20 @@ write.table(state_var_all, paste(temp_dir, file_name, sep = "/"), row.names = FA
 ## state variable has to be created (separate step -> either manually or with script) -> manually at the moment
 ## create new version of the state variable (include step in this script or manually) when updating the state variable
 
-## serach for your state variable
-state_name <- "c301_annual_sum_precipitation_weather_stations_v1" # write here the name including the version of the state variable you want to add data to
-state_version <- "1" # write here the version of the state variable
+## search for your state variable
+name <- "c301_annual_sum_precipitation_weather_stations_v1" # write here the name including the version of the state variable you want to add data to
+version <- "1" # write here the version of the state variable
 
-pkg_state <- package_search(q = list(paste("name:", state_name, sep = "")), fq = list(paste("version:", state_version, sep = "")), include_private = TRUE, include_drafts = TRUE)$results[[1]] # search for the dataset and save the results
-filenames_state <- pkg_state$resources %>% sapply("[[", "name") # get the filenames
-filenames_state # are there any files
+## get the package to which resources should be added
+
+pkg <- package_search(q = list(paste("name:", name, sep = "")), fq = list(paste("version:", version, sep = "")), include_private = TRUE, include_drafts = TRUE)$results[[1]] # search for the dataset and save the results
+pkg$name  # check name
+filenames <- pkg$resources %>% sapply("[[", "name") # get the filenames
+filenames # are there any files
 
 ## upload the aux file
 resource_create(
-  package_id = pkg_state$id,
+  package_id = pkg$id,
   description = NULL,
   upload = paste(tempdir(), "C301_annual_sum_precipitation_weather_stations_aux.txt", sep = "/"),
   name = "C301_annual_sum_precipitation_weather_stations_aux.txt",
@@ -287,7 +295,7 @@ resource_create(
 
 ## upload the coordinate file
 resource_create(
-  package_id = pkg_state$id,
+  package_id = pkg$id,
   description = NULL,
   upload = paste(tempdir(), "C301_annual_sum_precipitation_weather_stations_coordinates.txt", sep = "/"),
   name = "C301_annual_sum_precipitation_weather_stations_coordinates.txt",
@@ -297,7 +305,7 @@ resource_create(
 ## upload the data files
 for (i in file_name) {
   resource_create(
-    package_id = pkg_state$id,
+    package_id = pkg$id,
     description = NULL,
     upload = paste(tempdir(), i, sep = "/"),
     name = i,
@@ -314,10 +322,10 @@ for (i in file_name) {
 ## you can for example change the state from 'draft' to 'active (this is necessary if you created the state variable on data.coat.no and then added the datafiles via R)
 ## you can also change the visibility from private to public
 
-pkg_state$name # check that the name is correct
+pkg$name # check that the name is correct
 
 ## save metadata of the package as a list (as = table -> but the object will be a list)
-pkg_updated <- package_show(pkg_state$id, as = "table", http_method = "POST")
+pkg_updated <- package_show(pkg$id, as = "table", http_method = "POST")
 
 ## do the necessary modifications of the metadata
 names(pkg_updated) # show the names of all metadata fields that can be updated
@@ -328,10 +336,7 @@ pkg_updated$state <- "active"
 pkg_updated <- discard(pkg_updated, is.null)
 
 ## update the package
-package_update(pkg_updated, pkg_state$id, http_method = "POST")
-
-
-
+package_update(pkg_updated, pkg$id, http_method = "POST")
 
 
 
