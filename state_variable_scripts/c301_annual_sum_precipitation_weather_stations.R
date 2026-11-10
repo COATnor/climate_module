@@ -254,7 +254,7 @@ state_var_all <- bind_rows(state_var_list)
 
 ## save data to a temporary directory
 
-file_name <- paste0("C301_annual_sum_precipiation_weather_stations_", min(state_var_all$t_year), "_", max(state_var_all$t_year), ".txt")
+file_name <- paste0("C301_annual_sum_precipitation_weather_stations_", min(state_var_all$t_year), "_", max(state_var_all$t_year), ".txt")
 file_name
 
 write.table(state_var_all, paste(temp_dir, file_name, sep = "/"), row.names = FALSE, sep = ";")
@@ -269,7 +269,7 @@ write.table(state_var_all, paste(temp_dir, file_name, sep = "/"), row.names = FA
 ## create new version of the state variable (include step in this script or manually) when updating the state variable
 
 ## serach for your state variable
-state_name <- "c301_annual_sum_precipiation_weather_stations_v1" # write here the name including the version of the state variable you want to add data to
+state_name <- "c301_annual_sum_precipitation_weather_stations_v1" # write here the name including the version of the state variable you want to add data to
 state_version <- "1" # write here the version of the state variable
 
 pkg_state <- package_search(q = list(paste("name:", state_name, sep = "")), fq = list(paste("version:", state_version, sep = "")), include_private = TRUE, include_drafts = TRUE)$results[[1]] # search for the dataset and save the results
@@ -280,8 +280,8 @@ filenames_state # are there any files
 resource_create(
   package_id = pkg_state$id,
   description = NULL,
-  upload = paste(tempdir(), "C301_annual_sum_precipiation_weather_stations_aux.txt", sep = "/"),
-  name = "C301_annual_sum_precipiation_weather_stations_aux.txt",
+  upload = paste(tempdir(), "C301_annual_sum_precipitation_weather_stations_aux.txt", sep = "/"),
+  name = "C301_annual_sum_precipitation_weather_stations_aux.txt",
   http_method = "POST"
 )
 
@@ -289,8 +289,8 @@ resource_create(
 resource_create(
   package_id = pkg_state$id,
   description = NULL,
-  upload = paste(tempdir(), "C301_annual_sum_precipiation_weather_stations_coordinates.txt", sep = "/"),
-  name = "C301_annual_sum_precipiation_weather_stations_coordinates.txt",
+  upload = paste(tempdir(), "C301_annual_sum_precipitation_weather_stations_coordinates.txt", sep = "/"),
+  name = "C301_annual_sum_precipitation_weather_stations_coordinates.txt",
   http_method = "POST"
 )
 
