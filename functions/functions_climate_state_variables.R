@@ -175,7 +175,55 @@ gs<-function(tg,thres){length(tg[tg>thres])}
 # Input:
 # - tg = annual daily mean temperature series
 # - thres = temperaure threshold indicating lowest growing temperature (in degC)
-gdd<-function(tg,thres){sum(tg[tg>thres])}
+# - min_run = minimum number of days where temperature has to be above thres
+# - gdd_name = desired name for data value column based on thres value
+gdd <- function(tg, thres, min_run = 5, gdd_name) {
+  tg %>%
+    filter(t_month %in% 5:10) %>%
+    arrange(v_station_id, t_date) %>%
+    mutate(over_thres = !is.na(v_temperature_day) & 
+             v_temperature_day > thres) %>%
+    group_by(v_station_id) %>%
+    mutate(run_id = rep(seq_along(rle(over_thres)$lengths),
+                        rle(over_thres)$lengths)) %>%
+    group_by(v_station_id, run_id) %>%
+    mutate(
+      run_length = n(),
+      run_value = first(over_thres),
+      run_start = first(t_date)) %>%
+    ungroup() %>%
+    # Identify start and end of growing season
+    group_by(v_station_id, t_year) %>%
+    mutate(
+      start = if (any(run_value & run_length >= min_run)) {
+        min(run_start[run_value & run_length >= min_run])
+      } else {
+        as.Date(NA)
+      },
+      end = if (any(run_value & run_length >= min_run)) {
+        max(run_start[run_value & run_length >= min_run] +
+              run_length[run_value & run_length >= min_run] - 1)
+      } else {
+        as.Date(NA)
+      }
+    ) %>%
+    ungroup() %>%
+    # Calculate GDD and data coverage
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    summarise(
+      v_valid_days = sum(!is.na(v_temperature_day)),
+      v_expected_days = as.integer(
+        ymd(paste0(first(t_year), "-10-31")) -
+          ymd(paste0(first(t_year), "-05-01")) + 1),
+      v_data_coverage = v_valid_days / v_expected_days,
+      "{gdd_name}" := case_when(
+        v_data_coverage < 0.8 ~ NA_real_,
+        all(is.na(v_temperature_day)) ~ NA_real_,
+        is.infinite(first(start)) ~ 0,
+        TRUE ~ sum(v_temperature_day[
+          t_date >= first(start) & t_date <= first(end) & v_temperature_day > thres],
+          na.rm = TRUE)), .groups = "drop") %>%
+    select(sn_region, v_station_name, v_station_id, t_year, all_of(gdd_name))}
 #_________________________________________________________________
 
 
