@@ -1,0 +1,425 @@
+---
+title: "Annual mean air temperature for weather stations"
+subtitle: "COAT state variable C101"
+author: "Guro Bang Synnes Aase based on work by Hanna Bohner and Suaiba Amina Salahuddin"
+date: 11/11/2026
+format:
+  html:
+    toc: false
+    self-contained: false
+    theme: cosmo
+    code-fold: true
+    
+    code-tools: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+The figure uses the existing state variable from the
+[COAT data portal](https://data.coat.no/state-variable/c101_annual_mean_air_temperature_weather_stations_v1).
+
+The figure is interactive. You can:
+
+- Hover over points to inspect values.
+- Zoom and pan.
+- Hide or show regions using the legend.
+- Reset the view using the plot controls.
+
+## Source and attribution
+
+This document is based on the existing plotting script:
+
+```text
+state_variable_figure_v85_dwarf_shrub_abundance.Rmd
+```
+by Hanna Bohner.
+
+The original script was adapted to:
+
+- Use Quarto and HTML output.
+- Create an interactive Plotly figure.
+- Use the existing state variable from the COAT data portal.
+- Avoid saving figures to Box.
+- Avoid installing packages while rendering.
+- Avoid uploading or modifying data on the COAT data portal.
+- Produce an output suitable for later publication through GitHub Pages.
+
+```{r}
+#| label: setup
+#| include: false
+
+required_packages <- c(
+  "ckanr",
+  "dplyr",
+  "plotly"
+)
+
+missing_packages <- required_packages[
+  !vapply(
+    required_packages,
+    requireNamespace,
+    quietly = TRUE,
+    FUN.VALUE = logical(1)
+  )
+]
+
+if (length(missing_packages) > 0L) {
+  stop(
+    "The following R packages are missing: ",
+    paste(missing_packages, collapse = ", "),
+    ". Install them once before rendering this document."
+  )
+}
+
+suppressPackageStartupMessages({
+  library(ckanr)
+  library(dplyr)
+  library(plotly)
+})
+
+source(
+  "https://raw.githubusercontent.com/COATnor/data_management_scripts/master/download_data_from_coat_data_portal.R"
+)
+
+if (!nzchar(Sys.getenv("api_COAT"))) {
+  stop(
+    "The environment variable 'api_COAT' is not available. ",
+    "Add it to your local .Renviron file before rendering."
+  )
+}
+
+ckanr::ckanr_setup(
+  url = "https://data.coat.no",
+  key = Sys.getenv("api_COAT")
+)
+```
+
+```{r}
+#| label: download-data
+#| include: false
+
+# the splitting into historical and individual is an adaptation to the file structure for climate state variables
+
+years_historical <- 1830:2025
+#years_individual <- 2026:2028 # example for the years to come, when files containing data from only one year are added
+
+filename_historical <- paste0("C101_annual_mean_air_temperature_weather_stations_",
+                              min(years_historical), "_", max(years_historical), ".txt")
+#filenames_individual <- paste0("C101_annual_mean_air_temperature_weather_stations_", years_individual, ".txt") #for the years to come
+
+filenames <- filename_historical
+#filenames <- c(filename_historical, filenames_individual) #for the years to come
+
+
+dat_list <- download_coat_data(
+  name = "c101_annual_mean_air_temperature_weather_stations_v1",
+  filenames = filenames,
+  store = "session"
+)
+
+if (length(dat_list) == 0L) {
+  stop("No data were downloaded.")
+}
+
+dat <- dplyr::bind_rows(dat_list)
+
+if (nrow(dat) == 0L) {
+  stop("The downloaded data contain no rows.")
+}
+```
+
+
+```{r}
+
+#| label: prepare-data
+#| include: false
+
+# Extract all years from filenames
+years_in_filenames <- stringr::str_extract_all(
+  filenames,
+  "\\d{4}"
+) |>
+  unlist() |>
+  as.numeric()
+
+first_year <- min(years_in_filenames, na.rm = TRUE)
+last_year  <- max(years_in_filenames, na.rm = TRUE)
+
+
+region_codes <- c(
+  "svalbard",
+  "troms",
+  "varanger"
+)
+
+region_labels <- c(
+  svalbard = "Svalbard",
+  troms = "Troms",
+  varanger = "Varanger"
+)
+
+region_colours <- c(
+  "Svalbard" = "#468f9b",
+  "Troms" = "#df8600",
+  "Varanger" = "#925A00"
+)
+
+# Calculate annual regional mean and 95% confidence intervals
+dat_plot <- dat |>
+  dplyr::filter(
+    sn_region %in% region_codes
+  ) |>
+  dplyr::group_by(
+    sn_region,
+    t_year
+  ) |>
+  dplyr::summarise(
+    n = sum(!is.na(v_temperature_year)),
+
+    temperature_mean = if (n > 0) {
+      mean(v_temperature_year, na.rm = TRUE)
+    } else {
+      NA_real_
+    },
+
+    standard_deviation = if (n > 1) {
+      sd(v_temperature_year, na.rm = TRUE)
+    } else {
+      NA_real_
+    },
+
+    standard_error = standard_deviation / sqrt(n),
+
+    t_critical = if (n > 1) {
+      stats::qt(0.975, df = n - 1)
+    } else {
+      NA_real_
+    },
+
+    lower_ci = temperature_mean -
+      t_critical * standard_error,
+
+    upper_ci = temperature_mean +
+      t_critical * standard_error,
+
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    full_region = unname(region_labels[sn_region]),
+
+    colour = unname(region_colours[full_region]),
+
+    hover_text = paste0(
+      "<br>Region: ", full_region,
+      "<br>Year: ", t_year,
+      "<br>Mean temperature: ",
+      round(temperature_mean, 2), " ??C",
+      "<br>Upper 95% CI: ",
+      round(upper_ci, 2), " ??C",
+      "<br>Lower 95% CI: ",
+      round(lower_ci, 2), " ??C",
+      "<br>Number of stations: ", n
+    )
+  )
+
+```
+
+
+
+```{r}
+
+#| label: interactive-figure
+#| fig-width: 10
+#| fig-height: 6
+
+
+# Set y-axis limits based on the confidence intervals
+y_min <- min(dat_plot$lower_ci, na.rm = TRUE)
+y_max <- max(dat_plot$upper_ci, na.rm = TRUE)
+
+# Fallback if confidence intervals are unavailable
+if (!is.finite(y_min)) {
+  y_min <- min(dat_plot$temperature_mean, na.rm = TRUE)
+}
+
+if (!is.finite(y_max)) {
+  y_max <- max(dat_plot$temperature_mean, na.rm = TRUE)
+}
+
+# Add 10% padding to the y-axis
+y_range <- y_max - y_min
+
+if (!is.finite(y_range) || y_range == 0) {
+  y_range <- 1
+}
+
+y_axis_min <- y_min - y_range * 0.05
+y_axis_max <- y_max + y_range * 0.05
+
+
+######################################################
+
+
+# Sort data by region and year
+dat_plot <- dat_plot |>
+  dplyr::arrange(full_region, t_year)
+
+region_present <- unique(dat_plot$full_region)
+
+p <- plotly::plot_ly()
+
+# First: draw confidence interval polygons
+for (region_name in region_present) {
+
+  region_data <- dat_plot |>
+    dplyr::filter(
+      full_region == region_name,
+      !is.na(lower_ci),
+      !is.na(upper_ci),
+      is.finite(lower_ci),
+      is.finite(upper_ci)
+    ) |>
+    dplyr::arrange(t_year)
+
+  region_colour <- unique(region_data$colour)
+
+  if (nrow(region_data) > 1) {
+
+    # Construct a closed polygon:
+    # lower CI forward, upper CI backwards
+    polygon_x <- c(
+      region_data$t_year,
+      rev(region_data$t_year)
+    )
+
+    polygon_y <- c(
+      region_data$lower_ci,
+      rev(region_data$upper_ci)
+    )
+
+    p <- p |>
+      plotly::add_trace(
+        x = polygon_x,
+        y = polygon_y,
+        type = "scatter",
+        mode = "lines",
+        fill = "toself",
+        fillcolor = grDevices::adjustcolor(
+          region_colour,
+          alpha.f = 0.15
+        ),
+        line = list(
+          color = "rgba(0,0,0,0)",
+          width = 0
+        ),
+        name = paste0(region_name, " 95% CI"),
+        legendgroup = region_name,
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+  }
+}
+
+# Second: draw annual mean temperature lines
+for (region_name in region_present) {
+
+  region_data <- dat_plot |>
+    dplyr::filter(full_region == region_name) |>
+    dplyr::arrange(t_year)
+
+  region_colour <- unique(region_data$colour)
+
+  p <- p |>
+    plotly::add_trace(
+      data = region_data,
+      x = ~t_year,
+      y = ~temperature_mean,
+      type = "scatter",
+      mode = "lines+markers",
+      name = region_name,
+      legendgroup = region_name,
+      line = list(
+        color = region_colour,
+        width = 3
+      ),
+      marker = list(
+        color = region_colour,
+        size = 5
+      ),
+      text = ~hover_text,
+      hoverinfo = "text",
+      inherit = FALSE
+    )
+}
+
+
+
+######################################################
+
+
+# Create decade labels for the initial x-axis view
+decade_ticks <- seq(first_year, last_year, by = 10)
+
+p |>
+  plotly::layout(
+    title = list(
+      text = "Annual mean air temperature by region"
+    ),
+
+    xaxis = list(
+      title = "Year",
+      range = c(first_year, last_year),
+      dtick = 10
+    ),
+
+    yaxis = list(
+      title = "Temperature (??C)",
+      range = c(y_axis_min, y_axis_max),
+      tickformat = ".1f",
+      zeroline = TRUE
+    ),
+
+    hovermode = "x unified",
+
+    legend = list(
+      title = list(text = "Region")
+    )
+  ) |>
+  plotly::config(
+    displaylogo = FALSE,
+    responsive = TRUE,
+    modeBarButtonsToRemove = c(
+      "lasso2d",
+      "select2d"
+    )
+  )
+
+```
+
+
+
+::: {.figure-caption}
+
+**Annual mean air temperature for Svalbard, Troms and Varanger.** Calculations are based on historical weather station data from [Frost](https://frost.met.no/index.html) by MET Norway. Visit the [COAT data portal](https://data.coat.no/state-variable/c101_annual_mean_air_temperature_weather_stations_v1) for more information about the dataset.
+
+:::
+## Data and provenance
+
+The data were downloaded from the COAT data portal using the existing state
+variable:
+
+```text
+c101_annual_mean_air_temperature_weather_stations_v1
+```
+
+The following filters were applied:
+
+- Years included: `1830` to `2025`
+
+The figure is generated from an existing unpublished state variable on the COAT Data Portal. This
+document does not calculate a new state-variable version, upload files, or
+modify metadata on the COAT data portal.
+
