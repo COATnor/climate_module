@@ -228,6 +228,39 @@ gdd <- function(tg, thres, min_run = 5, gdd_name) {
 
 
 
+#===================================================================
+# gdd.acc: Accumulated growing degree days over a certain threshold
+#===================================================================
+# Input:
+# - tg = annual daily mean temperature series
+# - thres = temperaure threshold indicating lowest growing temperature (in degC)
+# - gdd_acc_name = desired name for data value column based on thres value
+gdd.acc <- function(tg, thres, gdd_acc_name) {
+  tg %>%
+    arrange(v_station_id, t_date) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    mutate(
+      # Calculate data coverage
+      v_valid_days = sum(!is.na(v_temperature_day)),
+      v_expected_days = as.integer(
+        ymd(paste0(first(t_year), "-12-31")) -
+          ymd(paste0(first(t_year), "-01-01")) + 1),
+      v_data_coverage = v_valid_days / v_expected_days,
+      # Calculate daily GDD
+      gdd_daily = case_when(
+        v_temperature_day > thres ~ v_temperature_day, TRUE ~ 0),
+      # Calculate accumulated GDD
+      "{gdd_acc_name}" := {if (is.na(first(v_data_coverage)) | first(v_data_coverage) < 0.8) {
+          NA_real_
+        } else {
+          cumsum(gdd_daily)}}) %>%
+    ungroup() %>%
+    select(
+      sn_region, v_station_name, v_station_id, t_year, t_date, all_of(gdd_acc_name))
+}
+#_________________________________________________________________
+
+
 #=================================================================
 # tm.month: Mean monthly temperature
 #=================================================================
