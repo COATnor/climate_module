@@ -122,12 +122,14 @@ station_info <- station_info_raw %>%
   mutate(e_dd = map_dbl(geometry.coordinates, ~ .x[1]),
          n_dd = map_dbl(geometry.coordinates, ~ .x[2])) %>% 
   mutate(v_owner = tolower(sapply(stationHolders, paste, collapse = ", "))) %>% 
-  mutate(v_owner = recode(v_owner,
-                          "statens vegvesen" = "statens_vegvesen",
-                          "norsk polarinstitutt" = "norsk_polarinstitutt",
-                          "avinor, met.no" = "met.no_avinor",
-                          "nilu – norsk institutt for luftforskning, met.no, nibio" = "nibio_nilu_met.no",
-                          "met.no, alfred-wegener-institut fur polar- und meeresforschung" = "alfred_wegener_institut_met.no")) %>% 
+  mutate(v_owner = case_when(
+    grepl("nibio", v_owner) & grepl("nilu", v_owner) & grepl("met.no", v_owner)  ~ "nibio_nilu_met.no",
+    grepl("alfred-wegener", v_owner) & grepl("met.no", v_owner)                  ~ "alfred_wegener_institut_met.no",
+    grepl("met.no", v_owner) & grepl("avinor", v_owner)                          ~ "met.no_avinor",
+    grepl("statens vegvesen", v_owner)                                           ~ "statens_vegvesen",
+    grepl("norsk polarinstitutt", v_owner)                                       ~ "norsk_polarinstitutt",
+    TRUE ~ v_owner # Keeps the original value if none of the above match
+  )) %>%
   arrange(sn_region, v_station_name)
 
 ## make the aux file
