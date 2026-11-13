@@ -11,7 +11,7 @@
 # This script calculates the temperature sum for days when daily temperature exceeds a threshold (calculated for both 0 and 5 degrees C) during the meteorological growing season, based on data from weather stations.
 # It also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
 # It downloads the element mean(air_temperature P1D) from Frost, with timeOffset PT0H (preferred) or PT6H.
-# The gdd function (sourced from GitHub) is used to calculate the temperature sum (for both threshold values) if daily mean temperature data are available for at least 80% of days during the year.
+# The gdd function (sourced from GitHub) is used to calculate the temperature sum (for both threshold values) if daily mean temperature data are available for at least 80% of days during the season.
 
 
 ## ------------------------------------------------------------------ ##
