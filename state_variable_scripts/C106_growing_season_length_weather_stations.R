@@ -11,6 +11,7 @@
 # for two temperature thresholds (0 and 5 degrees Celsius), stored as two columns in the same data file.
 # It also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
 # It downloads the element mean(air_temperature P1D) from Frost, with timeOffset PT0H (preferred) or PT6H.
+# The gs function (sourced from GitHub) is used to calculate the growing season length for each threshold.
 #
 # Definition of the growing season (per station, year and threshold):
 # - only days in May-October are considered (season_months)
@@ -84,42 +85,9 @@ utm33_from_wgs84 <- function(lon, lat) {
   cbind(easting = easting, northing = northing)
 }
 
-## find the first and last day of warm periods of at least min_run consecutive days (one station and year)
-find_season <- function(date, warm, min_run) {
-  runs <- rle(warm)
-  run_end <- cumsum(runs$lengths)
-  run_start <- run_end - runs$lengths + 1
-  qualifying <- which(runs$values & runs$lengths >= min_run)
-  if (length(qualifying) == 0) return(as.Date(c(NA, NA)))
-  date[c(run_start[min(qualifying)], run_end[max(qualifying)])]
-}
-
-## calculate the length of the growing season per station and year for one threshold
-## (input: one row per station and day, with complete years and NA for missing days)
-calc_gs_length <- function(data, thres_val, min_run = 5, months = 5:10, min_coverage = 0.8) {
-  data %>%
-    filter(t_month %in% months) %>%
-    arrange(v_station_id, date) %>%
-    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
-    group_modify(~ {
-      temp <- .x$v_temperature_day
-      # season if every missing day was cold vs. if every missing day was warm
-      season_na_cold <- find_season(.x$date, !is.na(temp) & temp > thres_val, min_run)
-      season_na_warm <- find_season(.x$date,  is.na(temp) | temp > thres_val, min_run)
-      determined <- identical(as.numeric(season_na_cold), as.numeric(season_na_warm))
-      enough_data <- mean(!is.na(temp)) >= min_coverage
-
-      if (!enough_data || !determined) {
-        season <- as.Date(c(NA, NA)); len <- NA_real_
-      } else if (is.na(season_na_cold[1])) {
-        season <- as.Date(c(NA, NA)); len <- 0            # enough data, but no growing season
-      } else {
-        season <- season_na_cold; len <- as.numeric(season[2] - season[1]) + 1
-      }
-      tibble(v_gs_start = season[1], v_gs_end = season[2], v_gs_length = len)
-    }) %>%
-    ungroup()
-}
+## load gs (growing season length) function from GitHub
+source("https://github.com/COATnor/climate_module/blob/main/functions/functions_climate_state_variables.R?raw=TRUE")
+#source("../functions/functions_climate_state_variables.R")  # use the local copy instead when testing changes to the functions
 
 ## define a list with IDs of all weather stations that should be included in the dataset
 sources <- c("SN98974",  # Bergebydalen
@@ -163,8 +131,7 @@ sources <- c("SN98974",  # Bergebydalen
 )
 
 ## define the growing season settings
-thresholds <- c(above0 = 0, above5 = 5)   # temperature thresholds in degrees C; the names are used in the column names
-season_months <- 5:10                     # months in which the growing season can start and end (May-October)
+season_months <- 5:10                    # months in which the growing season can start and end (May-October)
 min_run <- 5                              # minimum number of consecutive days above the threshold
 min_coverage <- 0.8                       # minimum proportion of days in season_months with data
 
@@ -327,29 +294,29 @@ for (i in 1:nrow(aux)) {
   ## format data, use PT0H if available and PT6H otherwise, keep one value per day
   station_dat <- raw_dat %>%
     filter(timeOffset %in% c("PT0H", "PT6H")) %>%
-    mutate(date = as.Date(ymd_hms(referenceTime))) %>%
-    select(date, value, timeOffset) %>%
-    group_by(date) %>%
+    mutate(t_date = as.Date(ymd_hms(referenceTime))) %>%
+    select(t_date, value, timeOffset) %>%
+    group_by(t_date) %>%
     arrange(case_when(timeOffset == "PT0H" ~ 1, timeOffset == "PT6H" ~ 2), .by_group = TRUE) %>%
     slice(1) %>%
     ungroup() %>%
     rename(v_temperature_day = value) %>%
-    select(date, v_temperature_day)
+    select(t_date, v_temperature_day)
 
   ## add missing dates with NA to make complete years
-  all_dates <- tibble(date = seq(floor_date(min(station_dat$date), "year"),
-                                 ceiling_date(max(station_dat$date), "year") - 1,
-                                 by = "day"))
+  all_dates <- tibble(t_date = seq(floor_date(min(station_dat$t_date), "year"),
+                                   ceiling_date(max(station_dat$t_date), "year") - 1,
+                                   by = "day"))
 
   data_list[[aux$v_station_id[i]]] <- all_dates %>%
-    left_join(station_dat, by = "date") %>%
+    left_join(station_dat, by = "t_date") %>%
     mutate(sn_region = aux$sn_region[i],
            v_station_name = aux$v_station_name[i],
            v_station_id = aux$v_station_id[i],
-           t_year = year(date),
-           t_month = month(date),
-           t_day = day(date)) %>%
-    select(sn_region, v_station_name, v_station_id, t_year, t_month, t_day, date, v_temperature_day)
+           t_year = year(t_date),
+           t_month = month(t_date),
+           t_day = day(t_date)) %>%
+    select(sn_region, v_station_name, v_station_id, t_year, t_month, t_day, t_date, v_temperature_day)
 }
 
 ## stations without data in the output
@@ -358,38 +325,58 @@ aux$v_station_name[!aux$v_station_id %in% names(data_list)]
 ## combine to one dataset
 data_all <- bind_rows(data_list)
 
+## check: first and last day with data per station (should be close to date_first and end_date)
+data_all %>%
+  filter(!is.na(v_temperature_day)) %>%
+  group_by(v_station_name) %>%
+  summarise(first_day = min(t_date), last_day = max(t_date)) %>%
+  left_join(select(aux, v_station_name, date_first), by = "v_station_name")
+
 
 ## ---------------------------------------------------------------------------- ##
 ## CALCULATE THE STATE VARIABLE
 ## ---------------------------------------------------------------------------- ##
 
-## calculate start, end and length of the growing season for each threshold
-gs_detail <- bind_rows(lapply(names(thresholds), function(thres_name) {
-  calc_gs_length(data_all, thres_val = thresholds[[thres_name]], min_run = min_run,
-                 months = season_months, min_coverage = min_coverage) %>%
-    mutate(threshold = thres_name)
-}))
+## run the gs function with threshold at 0 degrees C and threshold at 5 degrees C
+## (return_dates = TRUE also returns the start and end of the season, used for the checks below)
+gs_0 <- gs(tg = data_all, thres = 0, min_run = min_run, months = season_months, min_coverage = min_coverage,
+           gs_name = "v_growing_season_length_above0", return_dates = TRUE)
+gs_5 <- gs(tg = data_all, thres = 5, min_run = min_run, months = season_months, min_coverage = min_coverage,
+           gs_name = "v_growing_season_length_above5", return_dates = TRUE)
+
+## combine both thresholds in one table for the checks
+gs_check <- bind_rows(above0 = rename_with(gs_0, ~ sub("_above0", "", .x)),
+                      above5 = rename_with(gs_5, ~ sub("_above5", "", .x)),
+                      .id = "threshold")
 
 ## check: seasons that start on the first or end on the last day of season_months may be cut off
-## (if this happens often, consider extending season_months)
-window_first <- function(year) make_date(year, min(season_months), 1)
-window_last  <- function(year) ceiling_date(make_date(year, max(season_months), 1), "month") - 1
-
-gs_detail %>%
-  filter(v_gs_start == window_first(t_year) | v_gs_end == window_last(t_year)) %>%
-  count(threshold, v_station_name)
-
-## check: number of years with NA per station and threshold
-gs_detail %>%
+gs_check %>%
+  filter(v_growing_season_length > 0) %>%
   group_by(threshold, v_station_name) %>%
-  summarise(n_years = n(), n_na = sum(is.na(v_gs_length)), .groups = "drop") %>%
-  filter(n_na > 0)
+  summarise(n_seasons = n(),
+            cut_at_start = sum(v_growing_season_length_start == make_date(t_year, min(season_months), 1)),
+            cut_at_end = sum(v_growing_season_length_end == ceiling_date(make_date(t_year, max(season_months), 1), "month") - 1),
+            .groups = "drop") %>%
+  filter(cut_at_start > 0 | cut_at_end > 0)
 
-## make the final dataset, one column per threshold
-state_var_all <- gs_detail %>%
-  select(sn_region, v_station_name, v_station_id, t_year, threshold, v_gs_length) %>%
-  pivot_wider(names_from = threshold, values_from = v_gs_length,
-              names_prefix = "v_growing_season_length_") %>%
+## check: number of years with a value or NA, and the reason for NA
+coverage <- data_all %>%
+  filter(t_month %in% season_months) %>%
+  group_by(v_station_id, t_year) %>%
+  summarise(coverage = mean(!is.na(v_temperature_day)), .groups = "drop")
+
+gs_check %>%
+  left_join(coverage, by = c("v_station_id", "t_year")) %>%
+  mutate(result = case_when(!is.na(v_growing_season_length) ~ "value",
+                            coverage < min_coverage ~ "NA: less than 80% data",
+                            TRUE ~ "NA: gap could shift start/end")) %>%
+  count(threshold, result)
+
+## make final dataset
+state_var_all <- gs_0 %>%
+  left_join(gs_5, by = c("sn_region", "v_station_name", "v_station_id", "t_year")) %>%
+  select(sn_region, v_station_name, v_station_id, t_year,
+         v_growing_season_length_above0, v_growing_season_length_above5) %>%
   arrange(sn_region, v_station_name, t_year)
 
 ## save data to a temporary directory
