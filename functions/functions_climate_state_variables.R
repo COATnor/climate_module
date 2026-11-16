@@ -114,34 +114,13 @@ md.winter<-function(tg,dato){
 
 
 #=================================================================
-# ecd: Extreme cold days (tg < -30) 
-#=================================================================
-# Input dataframe: 
-# - tg = annual series of mean daily temperature
-ecd <- function(tg) {
-  tg %>%
-    filter(t_month %in% c(11, 12, 1:4)) %>% # keep only winter months
-    mutate(
-      t_year_winter = if_else(t_month %in% c(11, 12), t_year + 1, t_year)) %>% # Nov-Dec belong to the winter season (t_year_winter) in following year
-    group_by(sn_region, v_station_name, v_station_id, t_year_winter) %>%
-    summarise(
-      v_valid_days = sum(!is.na(v_temperature_day)), # days with non-missing temperature data
-      v_expected_days = as.integer(lubridate::ymd(paste0(first(t_year_winter), "-04-30")) - lubridate::ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1), # expected days in Nov-Apr winter season
-      v_data_coverage = v_valid_days / v_expected_days, # data coverage proportion
-      v_extreme_cold_days = if_else(v_data_coverage >= 0.8, sum(v_temperature_day < -30, na.rm = TRUE), NA_real_), .groups = "drop") %>% # count ecd if >= 0.8
-    select(sn_region, v_station_name, v_station_id, t_year_winter, v_extreme_cold_days) %>%
-    arrange(t_year_winter)
-}
-#_________________________________________________________________
-
-
-
-#=================================================================
-# cd: Cold days (tg < 0) 
+# cd: Cold days (tg < 0 or tg < -30) 
 #=================================================================
 # Input: 
 # - tg = annual series of mean daily temperature
-cd <- function(tg) {
+# - thres = temperature threshold (in degC)
+# - cd_name = desired name for data value column based on thres value
+cd <- function(tg,thres,cd_name) {
   tg %>%
     filter(t_month %in% c(11, 12, 1:4)) %>% # keep only winter months
     mutate(
@@ -151,8 +130,8 @@ cd <- function(tg) {
       v_valid_days = sum(!is.na(v_temperature_day)), # days with non-missing temperature data
       v_expected_days = as.integer(lubridate::ymd(paste0(first(t_year_winter), "-04-30")) - lubridate::ymd(paste0(first(t_year_winter) - 1, "-11-01")) + 1), # expected days in Nov-Apr winter season
       v_data_coverage = v_valid_days / v_expected_days, # data coverage proportion
-      v_extreme_cold_days = if_else(v_data_coverage >= 0.8, sum(v_temperature_day < 0, na.rm = TRUE), NA_real_), .groups = "drop") %>% # count ecd if >= 0.8
-    select(sn_region, v_station_name, v_station_id, t_year_winter, v_extreme_cold_days) %>%
+      "{cd_name}" := if_else(v_data_coverage >= 0.8, sum(v_temperature_day < thres, na.rm = TRUE), NA_real_), .groups = "drop") %>% # count cd if data coverage >= 0.8
+    select(sn_region, v_station_name, v_station_id, t_year_winter, all_of(cd_name)) %>%
     arrange(t_year_winter)
 }
 #_________________________________________________________________
@@ -163,7 +142,7 @@ cd <- function(tg) {
 #=================================================================
 # Input:
 # - tg = annual daily mean temperature series
-# - thres = temperaure threshold indicating lowest growing temperature (in degC)
+# - thres = temperature threshold indicating lowest growing temperature (in degC)
 gs<-function(tg,thres){length(tg[tg>thres])}
 #_________________________________________________________________
 
@@ -174,7 +153,7 @@ gs<-function(tg,thres){length(tg[tg>thres])}
 #=================================================================
 # Input:
 # - tg = annual daily mean temperature series
-# - thres = temperaure threshold indicating lowest growing temperature (in degC)
+# - thres = temperature threshold indicating lowest growing temperature (in degC)
 # - min_run = minimum number of days where temperature has to be above thres
 # - gdd_name = desired name for data value column based on thres value
 gdd <- function(tg, thres, min_run = 5, gdd_name) {
@@ -233,7 +212,7 @@ gdd <- function(tg, thres, min_run = 5, gdd_name) {
 #===================================================================
 # Input:
 # - tg = annual daily mean temperature series
-# - thres = temperaure threshold indicating lowest growing temperature (in degC)
+# - thres = temperature threshold indicating lowest growing temperature (in degC)
 # - gdd_acc_name = desired name for data value column based on thres value
 gdd.acc <- function(tg, thres, gdd_acc_name) {
   tg %>%
