@@ -138,12 +138,69 @@ cd <- function(tg,thres,cd_name) {
 
 
 #=================================================================
-# gs: Growing days over a certain threshold
+# gs: Length of the growing season (days) over a certain threshold
 #=================================================================
 # Input:
-# - tg = annual daily mean temperature series
+# - tg = data frame with daily mean temperature (v_temperature_day) per station (sn_region, v_station_name, v_station_id)
+#        and day (t_date, t_year, t_month); days missing from the data are treated as NA
 # - thres = temperature threshold indicating lowest growing temperature (in degC)
-gs<-function(tg,thres){length(tg[tg>thres])}
+# - min_run = minimum number of consecutive days where temperature has to be above thres
+# - months = months in which the growing season can start and end (default May-October)
+# - min_coverage = minimum proportion of days in months with data
+# - gs_name = desired name for data value column based on thres value
+# - return_dates = if TRUE, the start and end date of the season are also returned (columns <gs_name>_start and <gs_name>_end)
+# Definition (per station and year):
+# - start = first day of the first period of at least min_run consecutive days with temperature > thres
+# - end = last day of the last such period
+# - length = number of days from start to end (colder days in between are included)
+# - the length is 0 if there is no such period, and NA if less than min_coverage of the days have data,
+#   or if missing days could change the start or end of the season (the season is calculated with missing
+#   days treated as cold and as warm; if the two results differ, the length is NA)
+gs <- function(tg, thres, min_run = 5, months = 5:10, min_coverage = 0.8, gs_name, return_dates = FALSE) {
+  # first and last day of warm periods of at least min_run days (one station and year)
+  find_season <- function(dates, warm) {
+    runs <- rle(warm)
+    run_end <- cumsum(runs$lengths)
+    run_start <- run_end - runs$lengths + 1
+    qualifying <- which(runs$values & runs$lengths >= min_run)
+    if (length(qualifying) == 0) return(as.Date(c(NA, NA)))
+    dates[c(run_start[min(qualifying)], run_end[max(qualifying)])]
+  }
+
+  result <- tg %>%
+    filter(t_month %in% months) %>%
+    group_by(sn_region, v_station_name, v_station_id, t_year) %>%
+    group_modify(~ {
+      # all days in the season months, with NA for days that are missing in the data
+      dates <- seq(make_date(.y$t_year, min(months), 1),
+                   ceiling_date(make_date(.y$t_year, max(months), 1), "month") - 1, by = "day")
+      dates <- dates[month(dates) %in% months]
+      temp <- .x$v_temperature_day[match(dates, as.Date(.x$t_date))]
+
+      # season if every missing day was cold vs. if every missing day was warm
+      season_na_cold <- find_season(dates, !is.na(temp) & temp > thres)
+      season_na_warm <- find_season(dates, is.na(temp) | temp > thres)
+      determined <- identical(as.numeric(season_na_cold), as.numeric(season_na_warm))
+      enough_data <- mean(!is.na(temp)) >= min_coverage
+
+      if (!enough_data || !determined) {
+        season <- as.Date(c(NA, NA)); season_length <- NA_real_
+      } else if (is.na(season_na_cold[1])) {
+        season <- as.Date(c(NA, NA)); season_length <- 0  # enough data, but no growing season
+      } else {
+        season <- season_na_cold; season_length <- as.numeric(season[2] - season[1]) + 1
+      }
+      tibble(season_start = season[1], season_end = season[2], season_length = season_length)
+    }) %>%
+    ungroup() %>%
+    rename(!!gs_name := season_length,
+           !!paste0(gs_name, "_start") := season_start,
+           !!paste0(gs_name, "_end") := season_end) %>%
+    select(sn_region, v_station_name, v_station_id, t_year, all_of(gs_name), everything())
+
+  if (!return_dates) result <- select(result, -all_of(paste0(gs_name, c("_start", "_end"))))
+  result
+}
 #_________________________________________________________________
 
 
@@ -162,10 +219,10 @@ gdd <- function(tg, thres, min_run = 5, gdd_name) {
     arrange(v_station_id, t_date) %>%
     mutate(over_thres = !is.na(v_temperature_day) & 
              v_temperature_day > thres) %>%
-    group_by(v_station_id) %>%
+    group_by(v_station_id, t_year) %>% # find warm periods within each year, so they do not continue into the next year
     mutate(run_id = rep(seq_along(rle(over_thres)$lengths),
                         rle(over_thres)$lengths)) %>%
-    group_by(v_station_id, run_id) %>%
+    group_by(v_station_id, t_year, run_id) %>%
     mutate(
       run_length = n(),
       run_value = first(over_thres),
