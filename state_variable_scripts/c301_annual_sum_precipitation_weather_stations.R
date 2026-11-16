@@ -181,7 +181,7 @@ gaps  # add comment if there are stations with gaps
 
 ## add comments
 aux$v_comment[aux$v_station_name %in% missing_station]
-aux$v_comment[aux$v_station_name %in% missing_station] <- "no temperature data available from this station"
+aux$v_comment[aux$v_station_name %in% missing_station] <- "no precipitation data available from this station"
 
 ## use the date when data is available as date_first
 date_first <- element_info %>% 
