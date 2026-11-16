@@ -1,35 +1,34 @@
 #### --------------------------------------------------------------------------------------------------------- ####
-### STATE VARIABLE - C104_cold_days_below-30_weather_stations
-### Date: 27.05.2026
-### Author: Guro Bang Synnes
+### STATE VARIABLE - C104_cold_days_weather_stations
+### Date: 16.11.2026
+### Author: Guro Bang Synnes Aase
 #### --------------------------------------------------------------------------------------------------------- ####
 
 ## ------------------------------------------------------------------ ##
 ## WORKFLOW
 ## ------------------------------------------------------------------ ##
-# This script calculates the number of days where daily mean temperature is below -30 degrees Celcius during the winter season for weather stations.
+# This script calculates the number of days where daily mean temperature is below thresholds of 0 and -30 degrees Celsius during the winter season for weather stations.
 # It also generates aux and coordinate files containing information about when stations have been in use and their coordinates, respectively.
 # The winter season includes all days between November 1st and April 30th. Here, t_year_winter refers to the winter season ending in April that year.
 # It downloads the element mean(air_temperature P1D) from Frost, with timeOffset PT0H (preferred) or PT6H.
-# The ecd function (sourced from GitHub) is used to calculate the number of extreme cold days in a winter season for a weather station if daily mean temperature data are available for at least 80% of the winter season days.
+# The cd function (sourced from GitHub) is used to calculate the number of cold days (for both thresholds) in a winter season for a weather station if daily mean temperature data are available for at least 80% of the winter season days.
 
 
 ## ------------------------------------------------------------------ ##
 ## SETUP
 ## ------------------------------------------------------------------ ##
 
-rm(list =ls())
+## clear workspace
+rm(list = ls())
 
 ## load libraries
-library(tidyverse)
-library(lubridate)
-library(jsonlite)
-library(sf)
-library(ckanr)
-library(dplyr)
-library(stringr)
-library(lubridate)
-library(purrr)
+if (!require("remotes")) install.packages("remotes")
+if (!requireNamespace("tidyverse", quietly = TRUE)) {install.packages("tidyverse")};library("tidyverse")
+if (!requireNamespace("lubridate", quietly = TRUE)) {install.packages("lubridate")};library("lubridate")
+if (!requireNamespace("jsonlite", quietly = TRUE)) {install.packages("jsonlite")};library("jsonlite")
+if (!requireNamespace("sf", quietly = TRUE)) {install.packages("sf")};library("sf")
+if (!requireNamespace("ckanr", quietly = TRUE)) {install.packages("ckanr")};library("ckanr")
+
 
 Sys.setlocale(category = "LC_ALL", locale = "no_NB.utf8")
 
@@ -42,19 +41,19 @@ sources <- c("SN98974",  # Bergebydalen
              "SN98642",  # Komagdalen
              "SN98645",  # Hubehytta
              "SN98648",  # Ragarokk
-             "SN96890",  # Korgåsen
+             "SN96890",  # KorgC%sen
              "SN99600",  # Farkollen
-             "SN98790",  # Vadsø Lufthavn
-             "SN98550",  # Vardø Radio
+             "SN98790",  # VadsC8 Lufthavn
+             "SN98550",  # VardC8 Radio
              "SN98400",  # Makkaur Fyr
-             "SN98360",  # Båtsfjord - Straumnesaksla
-             "SN98090",  # Berlevåg Lufthavn
+             "SN98360",  # BC%tsfjord - Straumnesaksla
+             "SN98090",  # BerlevC%g Lufthavn
              #"SN98265",  # FV890 Gednje
-             #"SN98630",  # E75 Komagvær
+             #"SN98630",  # E75 KomagvC&r
              "SN96850",  # Tana bru
              "SN96931",  # Polmak Tollsted
              #"SN99090",  # E6 Gandvikbakken
-             "SN99770",  # Istjørndalen
+             "SN99770",  # IstjC8rndalen
              "SN99763",  # Reindalspasset
              "SN99875",  # Janssonhaugen
              "SN99874",  # Janssonhaufen Vest
@@ -65,22 +64,20 @@ sources <- c("SN98974",  # Bergebydalen
              "SN99840",  # Svalbard Lufthavn
              "SN99790",  # Isfjord Radio
              "SN99895",  # Kvadehuken II
-             "SN99890",  # Kaffiøyra
-             "SN99910",  # Ny-ålesund
+             "SN99890",  # KaffiC8yra
+             "SN99910",  # Ny-C%lesund
              "SN99370",  # Kirkenes Lufthavn
              "SN99460",  # Pasvik-Svanvik
              "SN99540",  # Nyrud
-             "SN90450",  # Tromsø MET
-             "SN90400",  # Tromsø Holt
-             "SN90490"   # Tromsø Langnes
+             "SN90450",  # TromsC8 MET
+             "SN90400",  # TromsC8 Holt
+             "SN90490"   # TromsC8 Langnes
 )
 
 ## define other parameters to download weather station data from frost.met.no
 client_id <- Sys.getenv("frost_client_id")  # create a user account here: https://frost.met.no/auth/requestCredentials.html; then write here your client id
 endpoint <- paste0("https://", client_id, "@frost.met.no/observations/v0.jsonld")  # move to downloading
-
-elements <- "mean(air_temperature P1D)" # daily mean temperature
-
+elements <- "mean(air_temperature P1D)" # mean daily air temperature
 #start_date <- "2004-01-01"  # specify start date when processing a single year
 end_date <- "2026-04-30"
 #referenceTime <- paste(start_date, end_date, sep = "/")
@@ -88,11 +85,16 @@ end_date <- "2026-04-30"
 ## make a temporary directory (the files will be stored there temporary before they are uploaded to the COAT dataportal)
 temp_dir <- tempdir()
 
-## set up the connection to the COAT dataportal 
-ckanr_setup(url =  "https://data.coat.no", 
-            key = Sys.getenv("api_COAT"))  # write here your API key (e.g. "asdf123af123")
+## setup the connection to the COAT data portal
+COAT_url <- "https://data.coat.no/"  # write here the url to the COAT data portal
+COAT_key <- Sys.getenv("COAT_key")  # paste your API token here (Manage -> API tokens on data.coat.no) or save it as an Environment variable
+ckanr_setup(url = COAT_url, key = if (COAT_key == "") NULL else COAT_key)
 
-## load ecd (extreme cold days) function from GitHub
+# helper for the authenticated downloads below. An empty COAT_key sends an
+# empty Authorization header, which CKAN treats as an anonymous request.
+auth_headers <- httr::add_headers(Authorization = COAT_key) #necessary?
+
+## load cd (cold days) function from GitHub
 source("https://github.com/COATnor/climate_module/blob/main/functions/functions_climate_state_variables.R?raw=TRUE")
 
 
@@ -122,12 +124,14 @@ station_info <- station_info_raw %>%
   mutate(e_dd = map_dbl(geometry.coordinates, ~ .x[1]),
          n_dd = map_dbl(geometry.coordinates, ~ .x[2])) %>% 
   mutate(v_owner = tolower(sapply(stationHolders, paste, collapse = ", "))) %>% 
-  mutate(v_owner = recode(v_owner,
-                          "statens vegvesen" = "statens_vegvesen",
-                          "norsk polarinstitutt" = "norsk_polarinstitutt",
-                          "avinor, met.no" = "met.no_avinor",
-                          "nilu – norsk institutt for luftforskning, nibio, met.no" = "nibio_nilu_met.no",
-                          "alfred-wegener-institut fur polar- und meeresforschung, met.no" = "alfred_wegener_institut_met.no")) %>% 
+  mutate(v_owner = case_when(
+    grepl("nibio", v_owner) & grepl("nilu", v_owner) & grepl("met.no", v_owner)  ~ "nibio_nilu_met.no",
+    grepl("alfred-wegener", v_owner) & grepl("met.no", v_owner)                  ~ "alfred_wegener_institut_met.no",
+    grepl("met.no", v_owner) & grepl("avinor", v_owner)                          ~ "met.no_avinor",
+    grepl("statens vegvesen", v_owner)                                           ~ "statens_vegvesen",
+    grepl("norsk polarinstitutt", v_owner)                                       ~ "norsk_polarinstitutt",
+    TRUE ~ v_owner # Keeps the original value if none of the above match
+  )) %>%
   arrange(sn_region, v_station_name)
 
 ## make the aux file
@@ -196,15 +200,13 @@ aux <- aux %>% select(-date_first) %>%
   select(sn_region, v_station_name, v_station_id, v_owner, v_meter_above_sea_level, date_first, date_last, v_comment)
 
 ## save aux and coordinate file to a temporary directory for uploading them to the COAT data portal later
-write.table(aux, paste(temp_dir, "C104_extreme_cold_days_weather_stations_aux.txt", sep = "/"), row.names = FALSE, sep = ";")
-write.table(coord, paste(temp_dir, "C104_extreme_cold_days_weather_stations_coordinates.txt", sep = "/"), row.names = FALSE, sep = ";")
+write.table(aux, paste(temp_dir, "C104_cold_days_weather_stations_aux.txt", sep = "/"), row.names = FALSE, sep = ";")
+write.table(coord, paste(temp_dir, "C104_cold_days_weather_stations_coordinates.txt", sep = "/"), row.names = FALSE, sep = ";")
 
 
 ## ---------------------------------------------------------------------------- ##
 ## DOWNLOAD AND PROCESS DATA FROM FROST
 ## ---------------------------------------------------------------------------- ##
-
-## janssonhaugen gives an error -> temp data first available in 2025
 
 data_list <- c()
 
@@ -265,10 +267,18 @@ for (i in 1:nrow(aux)) {
 data_all <- bind_rows(data_list)
 
 ## calculate state variable, ecd function is sourced from GitHub
-state_var_all <- ecd(data_all)
+cd_0 <- cd(tg = data_all, thres = 0, cd_name = "v_cold_days_below0")
+cd_minus30 <- cd(tg = data_all, thres = -30, cd_name = "v_cold_days_below-30")
+
+## make final dataset
+state_var_all <- cd_0 %>%
+  left_join(
+    cd_minus30,
+    by = c("sn_region", "v_station_name", "v_station_id", "t_year_winter"))
+
 
 ## save data to a temporary directory
-file_name <- paste0("C104_extreme_cold_days_weather_stations_", min(state_var_all$t_year_winter), "_", max(state_var_all$t_year_winter), ".txt")
+file_name <- paste0("C104_cold_days_weather_stations_", min(state_var_all$t_year_winter), "_", max(state_var_all$t_year_winter), ".txt")
 file_name
 
 write.table(state_var_all, paste(temp_dir, file_name, sep = "/"), row.names = FALSE, sep = ";")
@@ -282,7 +292,7 @@ write.table(state_var_all, paste(temp_dir, file_name, sep = "/"), row.names = FA
 ## create new version of the state variable (include step in this script or manually) when updating the state variable
 
 ## search for your state variable
-state_name <- "c104_extreme_cold_days_weather_stations_v1" # write here the name including the version of the state variable you want to add data to
+state_name <- "c104_cold_days_weather_stations_v1" # write here the name including the version of the state variable you want to add data to
 state_version <- "1" # write here the version of the state variable
 
 pkg_state <- package_search(q = list(paste("name:", state_name, sep = "")), fq = list(paste("version:", state_version, sep = "")), include_private = TRUE, include_drafts = TRUE)$results[[1]] # search for the dataset and save the results
@@ -293,8 +303,8 @@ filenames_state # are there any files
 resource_create(
   package_id = pkg_state$id,
   description = NULL,
-  upload = paste(tempdir(), "C104_extreme_cold_days_weather_stations_aux.txt", sep = "/"),
-  name = "C104_extreme_cold_days_weather_stations_aux.txt",
+  upload = paste(tempdir(), "C104_cold_days_weather_stations_aux.txt", sep = "/"),
+  name = "C104_cold_days_weather_stations_aux.txt",
   http_method = "POST"
 )
 
@@ -302,8 +312,8 @@ resource_create(
 resource_create(
   package_id = pkg_state$id,
   description = NULL,
-  upload = paste(tempdir(), "C104_extreme_cold_days_weather_stations_coordinates.txt", sep = "/"),
-  name = "C104_extreme_cold_days_weather_stations_coordinates.txt",
+  upload = paste(tempdir(), "C104_cold_days_weather_stations_coordinates.txt", sep = "/"),
+  name = "C104_cold_days_weather_stations_coordinates.txt",
   http_method = "POST"
 )
 
