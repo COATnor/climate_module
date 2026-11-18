@@ -18,10 +18,8 @@
 # - season start = first day of the first period of at least 5 consecutive days with daily mean temperature > threshold
 # - season end   = last day of the last period of at least 5 consecutive days with daily mean temperature > threshold
 # - season length = number of days from start to end (colder days in between are included)
-# - the length is 0 if there is no such period, and NA if
-#     a) less than 80% of the days in May-October have data, or
-#     b) missing days could change the start or end of the season (the season is calculated twice, treating
-#        missing days as cold and as warm; if the two results differ, the season length is set to NA)
+# - the length is 0 if there is no such period, and NA if less than 80% of the days in May-October have data
+#   (missing days are treated as days below the threshold, as for C105)
 
 
 ## ------------------------------------------------------------------ ##
@@ -359,18 +357,9 @@ gs_check %>%
             .groups = "drop") %>%
   filter(cut_at_start > 0 | cut_at_end > 0)
 
-## check: number of years with a value or NA, and the reason for NA
-coverage <- data_all %>%
-  filter(t_month %in% season_months) %>%
-  group_by(v_station_id, t_year) %>%
-  summarise(coverage = mean(!is.na(v_temperature_day)), .groups = "drop")
-
+## check: number of years with a value or NA (NA = less than 80% of the days in season_months have data)
 gs_check %>%
-  left_join(coverage, by = c("v_station_id", "t_year")) %>%
-  mutate(result = case_when(!is.na(v_growing_season_length) ~ "value",
-                            coverage < min_coverage ~ "NA: less than 80% data",
-                            TRUE ~ "NA: gap could shift start/end")) %>%
-  count(threshold, result)
+  count(threshold, result = if_else(is.na(v_growing_season_length), "NA", "value"))
 
 ## make final dataset
 state_var_all <- gs_0 %>%

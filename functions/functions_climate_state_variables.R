@@ -160,9 +160,8 @@ cd <- function(tg,thres,cd_name) {
 # - start = first day of the first period of at least min_run consecutive days with temperature > thres
 # - end = last day of the last such period
 # - length = number of days from start to end (colder days in between are included)
-# - the length is 0 if there is no such period, and NA if less than min_coverage of the days have data,
-#   or if missing days could change the start or end of the season (the season is calculated with missing
-#   days treated as cold and as warm; if the two results differ, the length is NA)
+# - the length is 0 if there is no such period, and NA if less than min_coverage of the days have data
+#   (missing days are treated as days below the threshold, as in gdd)
 gs <- function(tg, thres, min_run = 5, months = 5:10, min_coverage = 0.8, gs_name, return_dates = FALSE) {
   # first and last day of warm periods of at least min_run days (one station and year)
   find_season <- function(dates, warm) {
@@ -184,18 +183,16 @@ gs <- function(tg, thres, min_run = 5, months = 5:10, min_coverage = 0.8, gs_nam
       dates <- dates[month(dates) %in% months]
       temp <- .x$v_temperature_day[match(dates, as.Date(.x$t_date))]
 
-      # season if every missing day was cold vs. if every missing day was warm
-      season_na_cold <- find_season(dates, !is.na(temp) & temp > thres)
-      season_na_warm <- find_season(dates, is.na(temp) | temp > thres)
-      determined <- identical(as.numeric(season_na_cold), as.numeric(season_na_warm))
+      # start and end of the season (missing days count as days below the threshold)
+      season <- find_season(dates, !is.na(temp) & temp > thres)
       enough_data <- mean(!is.na(temp)) >= min_coverage
 
-      if (!enough_data || !determined) {
+      if (!enough_data) {
         season <- as.Date(c(NA, NA)); season_length <- NA_real_
-      } else if (is.na(season_na_cold[1])) {
-        season <- as.Date(c(NA, NA)); season_length <- 0  # enough data, but no growing season
+      } else if (is.na(season[1])) {
+        season_length <- 0  # enough data, but no growing season
       } else {
-        season <- season_na_cold; season_length <- as.numeric(season[2] - season[1]) + 1
+        season_length <- as.numeric(season[2] - season[1]) + 1
       }
       tibble(season_start = season[1], season_end = season[2], season_length = season_length)
     }) %>%
