@@ -116,6 +116,7 @@ md.winter<-function(tg) {
       v_md_winter = if_else(v_data_coverage >= 0.8, sum(v_temperature_day > 0, na.rm = TRUE), NA_real_), .groups = "drop") %>%
     select(sn_region, v_station_name, v_station_id, t_year_winter, v_md_winter) %>%
     arrange(t_year_winter)
+}
 #_________________________________________________________________
 
 
