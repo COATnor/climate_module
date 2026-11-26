@@ -1,8 +1,8 @@
 #### --------------------------------------------------------------------------------------------------------- ####
-### CLIMATE STATE VARIABLES for COAT sites based on CARRA
+### CLIMATE STATE VARIABLES FOR COAT SITES BASED ON CARRA
 ### CREATE NEW STATE VARIABLE VERSIONS AND UPDATE WITH NEW STATE VARIABLE DATA
 ### Date: November 2026
-### Author: Guro Bang Synnes Aase, based on scripts by Hanna B??hner
+### Author: Guro Bang Synnes Aase, based on scripts by Hanna Bohner
 #### --------------------------------------------------------------------------------------------------------- ####
 
 ## ------------------------------------------------------------------ ##
@@ -20,16 +20,16 @@
 # 4.  define functions for creating Thredds data file names and download urls
 # 5.  define function that, for a row in the configuration table, downloads corresponding files from Thredds and extracts data from COAT coordinates
 # 6.  run main loop, which downloads Thredds data and extracts data values for COAT sites for all selected state variables
-# 7.  for each selected state variable, write annual data file for the selected year with specific formatting settings
+# 7.  for each selected state variable, write annual data file for the selected year with formatting settings specific to each state variable
 # 8.  define function that creates a new state variable version on the COAT data portal and uploads files from previous version and annual file
 # 9.  check upload summary and make sure annual files in temporary directory look correct
 # 10. for all selected state variables, create new state variable versions on the data portal and upload corresponding files
 
 # CONFIGURATION TABLE
 # One configuration row controls the following:
-# folder_name_thredds:  folder name on Thredds server
-# base_name_thredds:    base name of data file on Thredds server (without version specification)
-# base_name_coat:       base of COAT climate state variable name
+# folder_name_thredds   folder name on Thredds server
+# base_name_thredds     base name of data file on Thredds server (without version specification)
+# base_name_coat        base of COAT climate state variable name
 # frequency             whether the data represent annual or monthly intervals
 # year_type             whether the data represent whole years, summer seasons or winter seasons
 # value_name            desired name for the data value column in annual file formatted after COAT standards
@@ -145,7 +145,7 @@ coord <- st_coordinates(coord)
 ## ------------------------------------------------------------------ ##
 
 make_filenames <- function(base_name_thredds, frequency, years, months) {
-    if (frequency == "annual") {
+  if (frequency == "annual") {
     tibble(
       year = years,
       month = NA_integer_,
@@ -238,7 +238,7 @@ extract_data <- function(config_row, years, months, coord, coords_metadata, temp
       message("\nDownload failed: ", conditionMessage(e))
       NA_integer_
     })
-
+    
     ## check downloaded file
     if (
       is.na(download_status) ||
@@ -320,12 +320,9 @@ all_extracted <- bind_rows(all_extracted)
 configuration_groups <- split(all_extracted, all_extracted$base_name_coat)
 
 
-# ------------------------------------------------------------------ #
-# 7. WRITE ANNUAL DATA FILES
-# ------------------------------------------------------------------ #
-
-## create output directory if it does not already exist
-dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
+## ------------------------------------------------------------------ ##
+## 7. WRITE ANNUAL DATA FILES
+## ------------------------------------------------------------------ ##
 
 ## store information about files for later uploading
 upload_overview <- data.frame(
@@ -460,9 +457,9 @@ message(
   "\n============================================")
 
 
-# ------------------------------------------------------------------------------ #
-# 8. DEFINE FUNCTION FOR CREATING NEW STATE VARIABLE VERSION AND UPLOADING DATA
-# ------------------------------------------------------------------------------ #
+## ------------------------------------------------------------------------------ ##
+## 8. DEFINE FUNCTION FOR CREATING NEW STATE VARIABLE VERSION AND UPLOADING DATA
+## ------------------------------------------------------------------------------ ##
 
 upload_new_version_data_portal <- function(coat_name, upload_overview) {
   
@@ -504,7 +501,7 @@ upload_new_version_data_portal <- function(coat_name, upload_overview) {
   state_version_new <- state_version + 1  # new version
   state_name_full <- paste(state_name, "_v", state_version, sep = "")
   state_name_new <- sub(state_version, state_version_new, state_name_full)  # name of the new version
-
+  
   end_new <- if (year_type == "winter_season") {
     paste0(years[1], "-04-30")
   } else if (year_type == "summer_season") {
@@ -552,7 +549,7 @@ upload_new_version_data_portal <- function(coat_name, upload_overview) {
   
   ## get the new version of the package
   pkg_state_new<-package_search(q = list(paste("name:", state_name_new, sep = "")), fq = list(paste("version:", state_version_new, sep = "")), include_private = TRUE, include_drafts = TRUE)$results[[1]]
-
+  
   ## add all resources
   if (length(pkg_state$resources) > 0) {
     for (i in 1:length(pkg_state$resources)) {
@@ -563,7 +560,7 @@ upload_new_version_data_portal <- function(coat_name, upload_overview) {
                       description = pkg_state$resources[[i]]$description)
     }
   }
-
+  
   ## upload annual data files, if they do not already exist
   data_files <- coat_files %>%
     filter(file_type == "data")
@@ -595,9 +592,9 @@ upload_new_version_data_portal <- function(coat_name, upload_overview) {
 }
 
 
-# ------------------------------------------------------------------ #
-# 9. CHECK UPLOAD SUMMARY AND FILES TO BE UPLOADED
-# ------------------------------------------------------------------ #
+## ------------------------------------------------------------------ ##
+## 9. CHECK UPLOAD SUMMARY AND FILES TO BE UPLOADED
+## ------------------------------------------------------------------ ##
 
 upload_check <- upload_overview %>%
   group_by(base_name_coat) %>%
@@ -633,9 +630,9 @@ View(upload_check)
 browseURL(tempdir())
 
 
-# ------------------------------------------------------------------ #
-# 10. CREATE NEW STATE VARIABLE VERSIONS AND UPLOAD FILES
-# ------------------------------------------------------------------ #
+## ------------------------------------------------------------------ ##
+## 10. CREATE NEW STATE VARIABLE VERSIONS AND UPLOAD FILES
+## ------------------------------------------------------------------ ##
 
 ## run function for all state variables in the upload overview
 for (coat_name in unique(upload_overview$base_name_coat)) {
